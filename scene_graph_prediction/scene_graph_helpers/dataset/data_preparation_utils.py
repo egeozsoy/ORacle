@@ -298,13 +298,15 @@ def load_full_image_data(scan_id_no_split, image_transform, augmentations=None):
     with open(f'{OR_4D_DATA_ROOT_PATH}/export_holistic_take{take_idx}_processed/timestamp_to_pcd_and_frames_list.json') as f:
         timestamp_to_pcd_and_frames_list = json.load(f)
     images = []
+    image_paths = []
     for c_idx in range(1, 7):
         color_idx_str = timestamp_to_pcd_and_frames_list[int(pcd_idx)][1][f'color_{c_idx}']
         color_path = Path(f'{OR_4D_DATA_ROOT_PATH}/export_holistic_take{take_idx}_processed/colorimage/camera0{c_idx}_colorimage-{color_idx_str}.jpg')
+        image_paths.append(color_path)
         img = Image.open(color_path).convert('RGB')
         if augmentations is not None:
             img = augmentations(img)
         img = image_transform(img)
         images.append(img)
 
-    return torch.stack(images)
+    return torch.stack(images), image_paths

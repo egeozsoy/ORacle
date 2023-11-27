@@ -46,7 +46,7 @@ OBJECT_LABEL_MAP = {
 
 TAKE_SPLIT = {'train': [1, 3, 5, 7, 9, 10], 'val': [4, 8], 'test': [2, 6]}
 
-OR_4D_DATA_ROOT_PATH = Path('datasets/4D-OR')
+OR_4D_DATA_ROOT_PATH = Path('../4D-OR')
 EXPORT_HOLISTICS_PATHS = list(OR_4D_DATA_ROOT_PATH.glob('export_holistic_take*'))
 OBJECT_POSES_PATH = OR_4D_DATA_ROOT_PATH / 'object_pose_results'
 OBJECT_SCANS_PATH = OR_4D_DATA_ROOT_PATH / 'object_scans'

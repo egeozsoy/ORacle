@@ -9,7 +9,7 @@ from helpers.utils import load_cam_infos
 from scene_graph_prediction.scene_graph_helpers.dataset.augmentation_utils import apply_data_augmentation_to_object_pcs, \
     apply_data_augmentations_to_relation_pcs
 from scene_graph_prediction.scene_graph_helpers.dataset.data_preparation_utils import data_preparation, load_full_image_data
-from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import load_data, get_weights, get_relationships, load_mesh
+from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import load_data, get_weights, get_relationships, load_mesh, map_scene_graph_name_to_vocab_idx
 from scene_graph_prediction.scene_graph_helpers.model.model_utils import get_image_model
 
 
@@ -126,7 +126,15 @@ class ORDataset(Dataset):
                 sample['rel_points'] = apply_data_augmentations_to_relation_pcs(sample['rel_points'], sample['rel_hand_points'], sample['gt_rels'],
                                                                                 self.relationNames)
         if image_input == 'full':
-            sample['full_image'] = load_full_image_data(scan_id_no_split, image_transform=self.full_image_transformations,
-                                                        augmentations=None)
+            sample['full_image'], sample['image_paths'] = load_full_image_data(scan_id_no_split, image_transform=self.full_image_transformations,
+                                                                               augmentations=None)
 
+        objs = self.objs_json[scan_id]
+        relations = self.relationship_json[scan_id]
+        # Map to our preferred form
+        relations = [(objs[sub_idx], rel_name, objs[obj_idx]) for (sub_idx, obj_idx, rel_idx, rel_name) in relations]
+        relations_tokenized = [(map_scene_graph_name_to_vocab_idx(sub), map_scene_graph_name_to_vocab_idx(rel), map_scene_graph_name_to_vocab_idx(obj)) for
+                               (sub, rel, obj) in
+                               relations]
+        sample['relations_tokenized'] = relations_tokenized
         return sample

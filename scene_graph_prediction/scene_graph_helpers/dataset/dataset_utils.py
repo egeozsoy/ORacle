@@ -287,3 +287,48 @@ def get_weights(classNames, relationNames, data, selected_scans, verbose=True, f
         print('')
 
     return w_cls_obj, w_cls_rel
+
+
+scene_graph_name_to_vocab_idx = {
+    'anesthesia_equipment': 0,
+    'operating_table': 1,
+    'instrument_table': 2,
+    'secondary_table': 3,
+    'instrument': 4,
+    'object': 5,
+    'patient': 6,
+    'human_0': 7,
+    'human_1': 8,
+    'human_2': 9,
+    'human_3': 10,
+    'human_4': 11,
+    'assisting': 20,
+    'cementing': 21,
+    'cleaning': 22,
+    'closeto': 23,
+    'cutting': 24,
+    'drilling': 25,
+    'hammering': 26,
+    'holding': 27,
+    'lyingon': 28,
+    'operating': 29,
+    'preparing': 30,
+    'sawing': 31,
+    'suturing': 32,
+    'touching': 33
+}
+vocab_idx_to_scene_graph_name = {v: k for k, v in scene_graph_name_to_vocab_idx.items()}
+
+
+def map_scene_graph_name_to_vocab_idx(name):
+    if name.lower() == 'anaesthesia_equipment':
+        name = 'anesthesia_equipment'
+    elif name.lower() == 'close':
+        name = 'closeto'
+    elif name.lower() == 'manipulating':
+        name = 'operating'
+    return scene_graph_name_to_vocab_idx[name.lower()]
+
+
+def map_vocab_idx_to_scene_graph_name(vocab_idx):
+    return vocab_idx_to_scene_graph_name[vocab_idx]
