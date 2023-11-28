@@ -42,20 +42,6 @@ class OracleWrapper:
 
         # if model path includes directly a specific checkpoint, this won't run. So we have to modify things a little bit.
         # 1) Copy default stuff from a standard folder into the parent folder. 2) Copy stuff inside the checkpoint folder to the parent folder. 3) Change the model path to the parent folder.
-        if 'checkpoint-' in model_path:
-            print('Model path includes a specific checkpoint. Preparing the parent folder.')
-            model_path = Path(model_path)
-            defaults_path = Path('/home/guests/ege_oezsoy/Oracle/LLaVA/checkpoints/defaults')
-            # copy every file from defaults_path to model_path.parent.
-            for file in defaults_path.iterdir():
-                if file.is_file():
-                    shutil.copy(file, model_path.parent / file.name)
-            # copy every file from model_path to model_path.parent
-            for file in model_path.iterdir():
-                if file.is_file():
-                    shutil.copy(file, model_path.parent / file.name)
-            # change model path to parent folder. Convert it back to string.
-            model_path = model_path.parent.as_posix()
 
         self.model_name = get_model_name_from_path(model_path)
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)

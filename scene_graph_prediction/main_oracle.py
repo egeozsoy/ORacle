@@ -27,7 +27,7 @@ def main():
     args = parser.parse_args()
     pl.seed_everything(42, workers=True)
     config = config_loader(args.config)
-    mode = 'evaluate'  # can be train/evaluate/infer
+    mode = 'evaluate'  # can be evaluate/infer
 
     name = args.config.replace('.json', '')
 
