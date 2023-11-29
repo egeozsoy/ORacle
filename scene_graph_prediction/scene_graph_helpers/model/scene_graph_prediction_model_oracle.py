@@ -16,7 +16,7 @@ from LLaVA.llava.conversation import conv_templates, SeparatorStyle
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token, KeywordsStoppingCriteria
 from LLaVA.llava.model.builder import load_pretrained_model
 from LLaVA.llava.utils import disable_torch_init
-from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import map_scene_graph_name_to_vocab_idx, map_vocab_idx_to_scene_graph_name
+from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import map_scene_graph_name_to_vocab_idx, map_vocab_idx_to_scene_graph_name, reversed_role_synonyms
 
 
 class OracleWrapper:
@@ -39,23 +39,6 @@ class OracleWrapper:
         self.reset_metrics()
         # Model
         disable_torch_init()
-
-        # if model path includes directly a specific checkpoint, this won't run. So we have to modify things a little bit.
-        # 1) Copy default stuff from a standard folder into the parent folder. 2) Copy stuff inside the checkpoint folder to the parent folder. 3) Change the model path to the parent folder.
-        if 'checkpoint-' in model_path:
-            print('Model path includes a specific checkpoint. Preparing the parent folder.')
-            model_path = Path(model_path)
-            defaults_path = Path('/home/guests/ege_oezsoy/Oracle/LLaVA/checkpoints/defaults')
-            # copy every file from defaults_path to model_path.parent.
-            for file in defaults_path.iterdir():
-                if file.is_file():
-                    shutil.copy(file, model_path.parent / file.name)
-            # copy every file from model_path to model_path.parent
-            for file in model_path.iterdir():
-                if file.is_file():
-                    shutil.copy(file, model_path.parent / file.name)
-            # change model path to parent folder. Convert it back to string.
-            model_path = model_path.parent.as_posix()
 
         self.model_name = get_model_name_from_path(model_path)
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
@@ -84,8 +67,7 @@ class OracleWrapper:
             image_tensor = image_tensor.to(self.model.device, dtype=torch.float16)
 
         # TODO this would need adapting if the prompt changes
-        inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, operating, preparing, sawing, suturing, touching]."
-        # inp = 'Describe the main action in this scene.' # TODO remove this. This only uses the main action
+        inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
         # first message
         if self.model.config.mm_use_im_start_end:
             inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
@@ -227,7 +209,7 @@ class OracleWrapper:
             triplets = []
             human_roles = set()  # Need to be mapped for this evaluation
             for triplet in triplet_str:
-                triplet = triplet.replace('.', '').strip()
+                triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
                 if triplet == '':
                     continue
                 triplet = triplet.split(',')
@@ -235,11 +217,11 @@ class OracleWrapper:
                 if len(triplet) != 3:
                     continue
                 sub, obj, pred = triplet
-                if sub == 'anesthetist':
-                    sub = 'anaesthetist'
-                if obj == 'anesthetist':
-                    obj = 'anaesthetist'
-                if sub in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:
+                if sub in reversed_role_synonyms:
+                    sub = reversed_role_synonyms[sub]
+                if obj in reversed_role_synonyms:
+                    obj = reversed_role_synonyms[obj]
+                if sub in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:  # TODO should patient be here?
                     human_roles.add(sub)
                 if obj in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:
                     human_roles.add(obj)

@@ -944,6 +944,9 @@ def train():
                     model.save_pretrained(checkpoint_dir, state_dict=state_dict)
                     torch.save(non_lora_state_dict, os.path.join(checkpoint_dir, 'non_lora_trainables.bin'))
 
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Trainable parameters: {trainable_params:,}")
+
     trainer = LLaVATrainer(model=model,
                            tokenizer=tokenizer,
                            args=training_args,

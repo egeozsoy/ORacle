@@ -67,8 +67,7 @@ def scene_graph_to_string(scene_graph, human_idx_to_name):
 
 
 def apply_template(image_path, scene_graph):
-    human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, operating, preparing, sawing, suturing, touching].'
-    # human_prompt = 'Describe the main action in this scene.' # TODO remove this. This only uses the main action
+    human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
     id = f'{image_path.parent.parent.stem}/{image_path.stem}'
 
     sample = {'id': id, 'image': str(image_path.absolute()),

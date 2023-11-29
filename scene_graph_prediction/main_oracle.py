@@ -32,16 +32,17 @@ def main():
     name = args.config.replace('.json', '')
 
     if mode == 'evaluate':
+        print(f'Model path: {args.model_path}')
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
-        # eval_dataset = ORDataset(config, 'val')
-        eval_dataset = ORDataset(config, 'train')
+        eval_dataset = ORDataset(config, 'val')
+        # eval_dataset = ORDataset(config, 'train')
         eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
         model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,
                               weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
                               model_path=args.model_path)
-        model.validate(eval_loader, limit_val_batches=1000)
+        model.validate(eval_loader)
     elif mode == 'infer':
         raise NotImplementedError('TODO')
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
@@ -79,6 +80,9 @@ if __name__ == '__main__':
     # TODO only evaluvate fully finished models, otherwise it is just wrong
     # TODO repeat log vs linear test
     # TODO experiment with adjusting the vocabulary. It is not trivial but should be possible
+    # TODO validation during training
+    # TODO we could also do a projection layer only training first to align and reduce overfitting?
+    # TODO unfreeze some backbone layers
 
     import subprocess
 
