@@ -66,11 +66,11 @@ def scene_graph_to_string(scene_graph, human_idx_to_name):
     return out
 
 
-def apply_template(image_path, scene_graph):
+def apply_template(image_paths, scene_graph):
     human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
-    id = f'{image_path.parent.parent.stem}/{image_path.stem}'
+    id = f'{image_paths[0].parent.parent.stem}/{image_paths[0].stem}'
 
-    sample = {'id': id, 'image': str(image_path.absolute()),
+    sample = {'id': id, 'image': [str(image_path.absolute()) for image_path in image_paths] if len(image_paths) > 1 else str(image_paths[0].absolute()),
               "conversations": [
                   {
                       "from": "human",
@@ -86,7 +86,7 @@ def apply_template(image_path, scene_graph):
     return sample
 
 
-def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,)):
+def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(1,2,3,5)):
     samples = []
     for index in range(len(dataset)):
         scan_id = dataset.scans[index]
@@ -112,14 +112,13 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
         relations = dataset.relationship_json[scan_id]
         relations = [(objs[sub_idx], rel_name, objs[obj_idx]) for (sub_idx, obj_idx, rel_idx, rel_name) in relations]
 
-        for view_idx in views_to_use:
-            image_path = image_paths[view_idx - 1]
+        image_paths = [image_paths[view_idx - 1] for view_idx in views_to_use]
 
-            for permutation_idx in range(n_permutations):  # TODO does id need to be unique? because right now it is not
-                shuffle(relations)  # order should be random
-                scene_graph_string = scene_graph_to_string(relations, human_idx_to_name)
-                sample = apply_template(image_path, scene_graph_string)
-                samples.append(sample)
+        for permutation_idx in range(n_permutations):  # TODO does id need to be unique? because right now it is not
+            shuffle(relations)  # order should be random
+            scene_graph_string = scene_graph_to_string(relations, human_idx_to_name)
+            sample = apply_template(image_paths, scene_graph_string)
+            samples.append(sample)
 
     return samples
 
@@ -137,6 +136,11 @@ def main():
         padding_side="right",
         use_fast=False,
     )
+    # entities = ["head surgeon", "assistant surgeon", "circulator", "nurse", "anaesthetist", "patient", "instrument table", "operating table",
+    #             "secondary table", "anesthesia equipment", "instrument"]
+    # predicates = ["assisting", "cementing", "cleaning", "closeTo", "cutting", "drilling", "hammering", "holding", "lyingOn", "manipulating",
+    #               "preparing", "sawing", "suturing", "touching"]
+    # tokenizer.add_special_tokens({"additional_special_tokens": entities + predicates})
 
     train_dataset = ORDataset(config, 'train', shuffle_objs=True)
     val_dataset = ORDataset(config, 'val')
@@ -154,7 +158,7 @@ def main():
                 token_freq.update(tokenized)
                 longest_sample = max(longest_sample, len(tokenized))
 
-    with open(f'data/llava_samples/train.json', 'w') as f:
+    with open(f'data/llava_samples/train_multiview.json', 'w') as f:
         json.dump(train_samples, f, indent=4)
 
     with open(f'data/llava_samples/train_token_freqs_7b.json', 'w') as f:

@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from .multimodal_encoder.builder import build_vision_tower
-from .multimodal_projector.builder import build_vision_projector
+from .multimodal_projector.builder import build_vision_projector, build_image_pooler
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
@@ -32,12 +32,16 @@ class LlavaMetaModel:
         if hasattr(config, "mm_vision_tower"):
             self.vision_tower = build_vision_tower(config, delay_load=True)
             self.mm_projector = build_vision_projector(config)
+            self.image_pooler = build_image_pooler(config)
 
     def get_vision_tower(self):
         vision_tower = getattr(self, 'vision_tower', None)
         if type(vision_tower) is list:
             vision_tower = vision_tower[0]
         return vision_tower
+
+    def get_image_pooler(self):
+        return self.image_pooler
 
     def initialize_vision_modules(self, model_args, fsdp=None):
         vision_tower = model_args.vision_tower
@@ -74,6 +78,10 @@ class LlavaMetaModel:
             for p in self.mm_projector.parameters():
                 p.requires_grad = True
 
+        # unfreeze image pooler
+        for p in self.image_pooler.parameters():
+            p.requires_grad = True
+
         if pretrain_mm_mlp_adapter is not None:
             mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu')
 
@@ -81,7 +89,6 @@ class LlavaMetaModel:
                 return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
 
             self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
-
 
 class LlavaMetaForCausalLM(ABC):
 
@@ -96,6 +103,17 @@ class LlavaMetaForCausalLM(ABC):
         image_features = self.get_model().get_vision_tower()(images)
         image_features = self.get_model().mm_projector(image_features)
         return image_features
+
+    def encode_images_pooled(self, images, split_sizes):
+        image_pooler = self.get_image_pooler()
+        image_features = self.get_model().get_vision_tower()(images)
+        image_features = torch.split(image_features, split_sizes, dim=0)
+        image_features = image_pooler(torch.stack(image_features).flatten(1, 2))
+        image_features = self.get_model().mm_projector(image_features)
+        return image_features
+
+    def get_image_pooler(self):
+        return self.get_model().get_image_pooler()
 
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, position_ids, attention_mask, past_key_values, labels, images
@@ -113,11 +131,29 @@ class LlavaMetaForCausalLM(ABC):
             return input_ids, position_ids, attention_mask, past_key_values, None, labels
 
         if type(images) is list or images.ndim == 5:
-            concat_images = torch.cat([image for image in images], dim=0)
-            image_features = self.encode_images(concat_images)
-            split_sizes = [image.shape[0] for image in images]
-            image_features = torch.split(image_features, split_sizes, dim=0)
-            image_features = [x.flatten(0, 1).to(self.device) for x in image_features]
+            if getattr(self.config, 'mv_type') == "concat":
+                concat_images = torch.cat([image for image in images], dim=0)
+                image_features = self.encode_images(concat_images)
+                split_sizes = [image.shape[0] for image in images]
+                image_features = torch.split(image_features, split_sizes, dim=0)
+                image_features = torch.stack([x.flatten(0, 1).to(self.device) for x in image_features])
+            if getattr(self.config, 'mv_type') == "max":
+                concat_images = torch.cat([image for image in images], dim=0)
+                image_features = self.encode_images(concat_images)
+                split_sizes = [image.shape[0] for image in images]
+                image_features = torch.split(image_features, split_sizes, dim=0)
+                image_features = torch.stack([x.max(dim=0)[0] for x in image_features])
+            if getattr(self.config, 'mv_type') == "avg":
+                concat_images = torch.cat([image for image in images], dim=0)
+                image_features = self.encode_images(concat_images)
+                split_sizes = [image.shape[0] for image in images]
+                image_features = torch.split(image_features, split_sizes, dim=0)
+                image_features = torch.stack([x.mean(dim=0) for x in image_features])
+            if getattr(self.config, 'mv_type') == "learned":
+                concat_images = torch.cat([image for image in images], dim=0)
+                split_sizes = [image.shape[0] for image in images]
+                image_features = self.encode_images_pooled(concat_images, split_sizes)
+
         else:
             image_features = self.encode_images(images).to(self.device)
 

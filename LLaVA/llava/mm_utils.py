@@ -36,7 +36,7 @@ def process_images(images, image_processor, model_cfg):
     else:
         return image_processor(images, return_tensors='pt')['pixel_values']
     if all(x.shape == new_images[0].shape for x in new_images):
-        new_images = torch.stack(new_images, dim=0)
+        new_images = torch.stack(new_images, dim=0) if len(new_images) == 1 else torch.stack(new_images, dim=0)[None]
     return new_images
 
 

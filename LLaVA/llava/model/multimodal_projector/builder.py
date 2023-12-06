@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import re
-
+from transformers import BertConfig, BertModel
 
 class IdentityMap(nn.Module):
     def __init__(self):
@@ -50,3 +50,40 @@ def build_vision_projector(config, delay_load=False, **kwargs):
         return IdentityMap()
 
     raise ValueError(f'Unknown projector type: {projector_type}')
+
+class ImageEmbeddingPooler(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embedding_dim = 1024
+
+        # Configure a new BERT model with 2 hidden layers and without positional embeddings
+        config = BertConfig(
+            hidden_size=self.embedding_dim,
+            num_hidden_layers=2,  # Set the number of hidden layers to 2
+            num_attention_heads=8,
+            intermediate_size=self.embedding_dim*2,
+            use_position_embeddings=True,
+            max_position_embeddings=2304,
+            use_bfloat16=True,
+            vocab_size=1,
+        )
+        self.bert = BertModel(config)
+
+    def forward(self, embeddings):
+        # embeddings shape: (batch_size, num_images, embedding_dim)
+        batch_size, num_tokens, _ = embeddings.shape
+        num_views = num_tokens // 576
+
+        # Process embeddings through BERT without positional IDs
+        outputs = self.bert(inputs_embeds=embeddings)
+
+        last_hidden_states = outputs['last_hidden_state'].to(embeddings.dtype)
+        # split mid dimension into num_views
+        last_hidden_states = last_hidden_states.view(batch_size, num_views, 576, self.embedding_dim)
+
+        pooled_output = torch.mean(last_hidden_states, dim=1)  # For mean pooling
+
+        return pooled_output
+
+def build_image_pooler(config):
+    return ImageEmbeddingPooler()

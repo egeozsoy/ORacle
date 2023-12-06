@@ -4,13 +4,10 @@
   "MAX_EPOCHES": 25,
   "LR": 0.00003,
   "W_DECAY": 0.001,
-  "NUM_WORKERS": 0,
+  "NUM_WORKERS": 8,
   "USE_GT": false,
   "CAMERAS": [
-    1,
-    2,
-    3,
-    5
+    1,2,3,5
   ],
   "IMAGE_INPUT": "full",
   "EDGE_BUILD_TYPE": "KNN",
@@ -36,7 +33,8 @@
     "w_bg": 1.0,
     "NONE_RATIO": 1.0,
     "FULL_IMAGE_EMBEDDING_SIZE": 768,
-    "IMAGE_MODEL": "tf_efficientnet_b5_ns"
+    "IMAGE_MODEL": "tf_efficientnet_b5_ns",
+    "mv_type": "learned"
   },
   "dataset": {
     "root": [

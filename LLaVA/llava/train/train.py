@@ -58,6 +58,7 @@ class ModelArguments:
     mm_use_im_start_end: bool = field(default=False)
     mm_use_im_patch_token: bool = field(default=True)
     mm_vision_select_feature: Optional[str] = field(default="patch")
+    mv_type: Optional[str] = field(default='concat')
 
 
 @dataclass
@@ -668,25 +669,47 @@ class LazySupervisedDataset(Dataset):
             image_file = self.list_data_dict[i]['image']
             image_folder = self.data_args.image_folder
             processor = self.data_args.image_processor
-            image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
-            if self.data_args.image_aspect_ratio == 'pad':
-                def expand2square(pil_img, background_color):
-                    width, height = pil_img.size
-                    if width == height:
-                        return pil_img
-                    elif width > height:
-                        result = Image.new(pil_img.mode, (width, width), background_color)
-                        result.paste(pil_img, (0, (width - height) // 2))
-                        return result
-                    else:
-                        result = Image.new(pil_img.mode, (height, height), background_color)
-                        result.paste(pil_img, ((height - width) // 2, 0))
-                        return result
-
-                image = expand2square(image, tuple(int(x * 255) for x in processor.image_mean))
-                image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+            if type(image_file) == list:
+                image = [Image.open(os.path.join(image_folder, image_file)).convert('RGB') for image_file in image_file]
+                if self.data_args.image_aspect_ratio == 'pad':
+                    def expand2square(pil_img, background_color):
+                        width, height = pil_img.size
+                        if width == height:
+                            return pil_img
+                        elif width > height:
+                            result = Image.new(pil_img.mode, (width, width), background_color)
+                            result.paste(pil_img, (0, (width - height) // 2))
+                            return result
+                        else:
+                            result = Image.new(pil_img.mode, (height, height), background_color)
+                            result.paste(pil_img, ((height - width) // 2, 0))
+                            return result
+                    image = [expand2square(image, tuple(int(x * 255) for x in processor.image_mean)) for image in image]
+                    image = [processor.preprocess(image, return_tensors='pt')['pixel_values'][0] for image in image]
+                    # stack images
+                    image = torch.stack(image, dim=0)
+                else:
+                    image = [processor.preprocess(image, return_tensors='pt')['pixel_values'][0] for image in image]
             else:
-                image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+                image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
+                if self.data_args.image_aspect_ratio == 'pad':
+                    def expand2square(pil_img, background_color):
+                        width, height = pil_img.size
+                        if width == height:
+                            return pil_img
+                        elif width > height:
+                            result = Image.new(pil_img.mode, (width, width), background_color)
+                            result.paste(pil_img, (0, (width - height) // 2))
+                            return result
+                        else:
+                            result = Image.new(pil_img.mode, (height, height), background_color)
+                            result.paste(pil_img, ((height - width) // 2, 0))
+                            return result
+
+                    image = expand2square(image, tuple(int(x * 255) for x in processor.image_mean))
+                    image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+                else:
+                    image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
             sources = preprocess_multimodal(
                 copy.deepcopy([e["conversations"] for e in sources]),
                 self.data_args)
@@ -775,7 +798,7 @@ def train():
             quantization_config=BitsAndBytesConfig(
                 load_in_4bit=training_args.bits == 4,
                 load_in_8bit=training_args.bits == 8,
-                llm_int8_skip_modules=["mm_projector"],
+                llm_int8_skip_modules=["mm_projector", "image_pooler"],
                 llm_int8_threshold=6.0,
                 llm_int8_has_fp16_weight=False,
                 bnb_4bit_compute_dtype=compute_dtype,
@@ -807,6 +830,7 @@ def train():
             **bnb_model_from_pretrained_args
         )
     model.config.use_cache = False
+    model.config.mv_type = model_args.mv_type
 
     if model_args.freeze_backbone:
         model.model.requires_grad_(False)
@@ -858,7 +882,14 @@ def train():
             padding_side="right",
             use_fast=False,
         )
-
+        # entities =  ["head surgeon", "assistant surgeon", "circulator", "nurse", "anaesthetist", "patient", "instrument table", "operating table", "secondary table", "anesthesia equipment", "instrument"]
+        # predicates = ["assisting", "cementing", "cleaning", "closeTo", "cutting", "drilling", "hammering", "holding", "lyingOn", "manipulating", "preparing", "sawing", "suturing", "touching"]
+        #
+        # smart_tokenizer_and_embedding_resize(
+        #     special_tokens_dict={"additional_special_tokens": entities + predicates},
+        #     tokenizer=tokenizer,
+        #     model=model,
+        # )
     if model_args.version == "v0":
         if tokenizer.pad_token is None:
             smart_tokenizer_and_embedding_resize(
@@ -902,8 +933,12 @@ def train():
             for p in model.get_model().mm_projector.parameters():
                 p.requires_grad = False
 
+        # reinitialize image_pooler
+        model.get_model().image_pooler.bert = model.get_model().image_pooler.bert.apply(model.get_model().image_pooler.bert._init_weights)
+
         if training_args.bits in [4, 8]:
             model.get_model().mm_projector.to(dtype=compute_dtype, device=training_args.device)
+            model.get_model().image_pooler.to(dtype=compute_dtype, device=training_args.device)
 
         model.config.mm_use_im_start_end = data_args.mm_use_im_start_end = model_args.mm_use_im_start_end
         model.config.mm_projector_lr = training_args.mm_projector_lr
@@ -947,6 +982,8 @@ def train():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {trainable_params:,}")
 
+    from llava.train.llama_patch import upcast_layer_for_flash_attention
+    model = upcast_layer_for_flash_attention(model, torch.bfloat16)
     trainer = LLaVATrainer(model=model,
                            tokenizer=tokenizer,
                            args=training_args,

@@ -18,12 +18,14 @@ from transformers.trainer import (
 )
 from typing import List, Optional
 
-with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b.json') as f:
+# with open('/home/guests/chantal_pellegrini/Oracle/data/llava_samples/train_token_freqs_7b_extended.json') as f:
+#     token_frequencies = json.load(f)
+with open('/home/guests/chantal_pellegrini/Oracle/data/llava_samples/train_token_freqs_7b.json') as f:
     token_frequencies = json.load(f)
 # with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_onlymainaction.json') as f: # TODO go back
 
-token_weights = {k: 1 / v for k, v in token_frequencies.items()}  # linear weighting
-# token_weights = {k: 1 / (np.log(v) + 1) for k, v in token_frequencies.items()}  # log weighting, seems to work better in this case
+# token_weights = {k: 1 / v for k, v in token_frequencies.items()}  # linear weighting
+token_weights = {k: 1 / (np.log(v) + 1) for k, v in token_frequencies.items()}  # log weighting, seems to work better in this case
 min_weight = min(token_weights.values())
 extra_token_weight = min_weight / 100  # 100 smaller than the smallest weight
 

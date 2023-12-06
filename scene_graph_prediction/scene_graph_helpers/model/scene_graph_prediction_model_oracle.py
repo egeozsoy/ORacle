@@ -42,6 +42,7 @@ class OracleWrapper:
 
         self.model_name = get_model_name_from_path(model_path)
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
+        self.model.config.mv_type = self.mconfig['mv_type']
 
     def forward(self, batch):
 
