@@ -1,0 +1,373 @@
+checkpoint-1000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.43      0.14      0.21       212
+   Cementing       0.51      0.95      0.67        20
+    Cleaning       0.16      0.97      0.27        99
+     CloseTo       0.94      0.54      0.68     17118
+     Cutting       0.31      0.85      0.45        46
+    Drilling       0.74      0.56      0.64        25
+   Hammering       0.69      0.69      0.69        54
+     Holding       0.86      0.37      0.51       901
+     LyingOn       1.00      0.53      0.70      1161
+   Operating       0.41      0.72      0.53       104
+   Preparing       0.39      0.40      0.40       379
+      Sawing       0.49      0.88      0.62        40
+    Suturing       0.18      0.10      0.13        20
+    Touching       0.29      0.75      0.42       577
+        none       0.82      0.98      0.89     36346
+
+    accuracy                           0.81     57102
+   macro avg       0.55      0.63      0.52     57102
+weighted avg       0.85      0.81      0.81     57102
+
+checkpoint-2000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.56      0.36      0.44       212
+   Cementing       0.74      0.85      0.79        20
+    Cleaning       0.52      0.81      0.63        99
+     CloseTo       0.96      0.80      0.87     17118
+     Cutting       0.79      0.41      0.54        46
+    Drilling       0.83      0.80      0.82        25
+   Hammering       0.77      0.67      0.71        54
+     Holding       0.89      0.51      0.65       901
+     LyingOn       1.00      0.55      0.71      1161
+   Operating       0.44      0.93      0.60       104
+   Preparing       0.66      0.71      0.69       379
+      Sawing       0.44      0.93      0.60        40
+    Suturing       0.26      0.35      0.30        20
+    Touching       0.26      0.86      0.40       577
+        none       0.92      0.98      0.95     36346
+
+    accuracy                           0.90     57102
+   macro avg       0.67      0.70      0.65     57102
+weighted avg       0.92      0.90      0.91     57102
+
+checkpoint-3000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.62      0.73      0.67       212
+   Cementing       0.68      0.85      0.76        20
+    Cleaning       0.56      0.94      0.70        99
+     CloseTo       0.96      0.84      0.89     17118
+     Cutting       0.69      0.83      0.75        46
+    Drilling       0.75      0.72      0.73        25
+   Hammering       0.83      0.65      0.73        54
+     Holding       0.93      0.58      0.71       901
+     LyingOn       1.00      0.91      0.96      1161
+   Operating       0.79      0.86      0.82       104
+   Preparing       0.61      0.85      0.71       379
+      Sawing       0.55      0.90      0.68        40
+    Suturing       0.36      0.65      0.46        20
+    Touching       0.32      0.84      0.47       577
+        none       0.94      0.98      0.96     36346
+
+    accuracy                           0.92     57102
+   macro avg       0.71      0.81      0.73     57102
+weighted avg       0.94      0.92      0.93     57102
+
+checkpoint-4000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.75      0.56      0.64       212
+   Cementing       0.57      0.85      0.68        20
+    Cleaning       0.71      0.80      0.75        99
+     CloseTo       0.98      0.86      0.92     17118
+     Cutting       0.82      0.70      0.75        46
+    Drilling       0.77      0.80      0.78        25
+   Hammering       0.85      0.65      0.74        54
+     Holding       0.96      0.50      0.65       901
+     LyingOn       1.00      0.85      0.92      1161
+   Operating       0.69      0.94      0.80       104
+   Preparing       0.68      0.84      0.76       379
+      Sawing       0.63      0.82      0.72        40
+    Suturing       0.45      0.25      0.32        20
+    Touching       0.37      0.60      0.46       577
+        none       0.93      0.99      0.96     36346
+
+    accuracy                           0.93     57102
+   macro avg       0.74      0.73      0.72     57102
+weighted avg       0.94      0.93      0.93     57102
+
+checkpoint-5000
+val Results:
+              precision    recall  f1-score   support
+
+   Assisting       0.62      0.58      0.60       212
+   Cementing       0.46      0.85      0.60        20
+    Cleaning       0.32      0.81      0.46        99
+     CloseTo       0.98      0.84      0.91     17118
+     Cutting       0.67      0.65      0.66        46
+    Drilling       0.78      0.84      0.81        25
+   Hammering       0.59      0.59      0.59        54
+     Holding       0.95      0.57      0.71       901
+     LyingOn       1.00      0.65      0.79      1161
+   Operating       0.60      0.92      0.73       104
+   Preparing       0.60      0.70      0.65       379
+      Sawing       0.43      0.95      0.59        40
+    Suturing       0.09      0.70      0.16        20
+    Touching       0.37      0.62      0.46       577
+        none       0.93      0.99      0.96     36346
+
+    accuracy                           0.92     57102
+   macro avg       0.63      0.75      0.64     57102
+weighted avg       0.93      0.92      0.92     57102
+
+checkpoint-6000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.68      0.74      0.71       212
+   Cementing       0.58      0.95      0.72        20
+    Cleaning       0.54      0.94      0.69        99
+     CloseTo       0.98      0.87      0.92     17118
+     Cutting       0.78      0.83      0.80        46
+    Drilling       0.77      0.96      0.86        25
+   Hammering       0.67      0.72      0.70        54
+     Holding       0.94      0.70      0.80       901
+     LyingOn       1.00      0.71      0.83      1161
+   Operating       0.71      0.95      0.81       104
+   Preparing       0.73      0.82      0.77       379
+      Sawing       0.62      0.80      0.70        40
+    Suturing       0.80      0.80      0.80        20
+    Touching       0.52      0.91      0.66       577
+        none       0.94      0.99      0.96     36346
+
+    accuracy                           0.94     57102
+   macro avg       0.75      0.85      0.78     57102
+weighted avg       0.95      0.94      0.94     57102
+
+checkpoint-7000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.72      0.73      0.72       212
+   Cementing       0.66      0.95      0.78        20
+    Cleaning       0.70      0.90      0.79        99
+     CloseTo       0.98      0.90      0.94     17118
+     Cutting       0.75      0.85      0.80        46
+    Drilling       0.79      0.92      0.85        25
+   Hammering       0.70      0.70      0.70        54
+     Holding       0.95      0.67      0.79       901
+     LyingOn       1.00      0.83      0.91      1161
+   Operating       0.82      0.97      0.89       104
+   Preparing       0.66      0.89      0.76       379
+      Sawing       0.72      0.90      0.80        40
+    Suturing       0.65      0.55      0.59        20
+    Touching       0.56      0.89      0.69       577
+        none       0.95      0.99      0.97     36346
+
+    accuracy                           0.95     57102
+   macro avg       0.77      0.84      0.80     57102
+weighted avg       0.95      0.95      0.95     57102
+
+checkpoint-8000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.74      0.76      0.75       212
+   Cementing       0.67      1.00      0.80        20
+    Cleaning       0.69      0.82      0.75        99
+     CloseTo       0.98      0.92      0.95     17118
+     Cutting       0.83      0.74      0.78        46
+    Drilling       0.82      0.92      0.87        25
+   Hammering       0.74      0.83      0.78        54
+     Holding       0.96      0.66      0.78       901
+     LyingOn       1.00      0.85      0.92      1161
+   Operating       0.88      0.92      0.90       104
+   Preparing       0.77      0.86      0.81       379
+      Sawing       0.82      0.82      0.82        40
+    Suturing       0.86      0.30      0.44        20
+    Touching       0.77      0.88      0.82       577
+        none       0.96      0.99      0.97     36346
+
+    accuracy                           0.96     57102
+   macro avg       0.83      0.82      0.81     57102
+weighted avg       0.96      0.96      0.96     57102
+
+checkpoint-9000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.74      0.82      0.78       212
+   Cementing       0.74      1.00      0.85        20
+    Cleaning       0.77      0.75      0.76        99
+     CloseTo       0.98      0.92      0.95     17118
+     Cutting       0.94      0.65      0.77        46
+    Drilling       0.85      0.92      0.88        25
+   Hammering       0.74      0.83      0.78        54
+     Holding       0.96      0.66      0.78       901
+     LyingOn       1.00      0.79      0.88      1161
+   Operating       0.93      0.83      0.88       104
+   Preparing       0.77      0.88      0.82       379
+      Sawing       0.86      0.80      0.83        40
+    Suturing       0.75      0.15      0.25        20
+    Touching       0.77      0.87      0.82       577
+        none       0.95      0.99      0.97     36346
+
+    accuracy                           0.96     57102
+   macro avg       0.85      0.79      0.80     57102
+weighted avg       0.96      0.96      0.96     57102
+
+checkpoint-10000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.70      0.82      0.75       212
+   Cementing       0.77      1.00      0.87        20
+    Cleaning       0.82      0.78      0.80        99
+     CloseTo       0.97      0.94      0.95     17118
+     Cutting       1.00      0.59      0.74        46
+    Drilling       1.00      0.92      0.96        25
+   Hammering       0.84      0.70      0.77        54
+     Holding       0.94      0.74      0.83       901
+     LyingOn       1.00      0.87      0.93      1161
+   Operating       0.91      0.92      0.91       104
+   Preparing       0.76      0.88      0.82       379
+      Sawing       0.94      0.82      0.88        40
+    Suturing       0.75      0.15      0.25        20
+    Touching       0.81      0.84      0.83       577
+        none       0.97      0.99      0.98     36346
+
+    accuracy                           0.96     57102
+   macro avg       0.88      0.80      0.82     57102
+weighted avg       0.96      0.96      0.96     57102
+
+checkpoint-11000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.79      0.71      0.75       212
+   Cementing       0.77      1.00      0.87        20
+    Cleaning       0.85      0.73      0.78        99
+     CloseTo       0.98      0.94      0.96     17118
+     Cutting       0.93      0.61      0.74        46
+    Drilling       1.00      0.88      0.94        25
+   Hammering       0.82      0.74      0.78        54
+     Holding       0.95      0.74      0.83       901
+     LyingOn       1.00      0.96      0.98      1161
+   Operating       0.91      0.95      0.93       104
+   Preparing       0.75      0.89      0.81       379
+      Sawing       0.92      0.82      0.87        40
+    Suturing       1.00      0.10      0.18        20
+    Touching       0.82      0.82      0.82       577
+        none       0.97      0.99      0.98     36346
+
+    accuracy                           0.97     57102
+   macro avg       0.90      0.79      0.81     57102
+weighted avg       0.97      0.97      0.97     57102
+
+checkpoint-12000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.73      0.76      0.75       212
+   Cementing       0.53      0.95      0.68        20
+    Cleaning       0.72      0.77      0.74        99
+     CloseTo       0.98      0.94      0.96     17118
+     Cutting       0.58      0.70      0.63        46
+    Drilling       0.76      1.00      0.86        25
+   Hammering       0.64      0.80      0.71        54
+     Holding       0.94      0.76      0.84       901
+     LyingOn       1.00      0.97      0.98      1161
+   Operating       0.90      0.92      0.91       104
+   Preparing       0.71      0.92      0.80       379
+      Sawing       0.71      0.75      0.73        40
+    Suturing       0.46      0.30      0.36        20
+    Touching       0.70      0.91      0.79       577
+        none       0.97      0.99      0.98     36346
+
+    accuracy                           0.97     57102
+   macro avg       0.76      0.83      0.78     57102
+weighted avg       0.97      0.97      0.97     57102
+
+checkpoint-13000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.76      0.77      0.77       212
+   Cementing       0.63      0.95      0.76        20
+    Cleaning       0.67      0.84      0.74        99
+     CloseTo       0.98      0.95      0.96     17118
+     Cutting       0.56      0.85      0.67        46
+    Drilling       0.82      0.92      0.87        25
+   Hammering       0.76      0.72      0.74        54
+     Holding       0.95      0.74      0.83       901
+     LyingOn       1.00      0.97      0.99      1161
+   Operating       0.93      0.91      0.92       104
+   Preparing       0.77      0.88      0.82       379
+      Sawing       0.74      0.80      0.77        40
+    Suturing       0.83      0.25      0.38        20
+    Touching       0.82      0.86      0.84       577
+        none       0.97      0.99      0.98     36346
+
+    accuracy                           0.97     57102
+   macro avg       0.81      0.83      0.80     57102
+weighted avg       0.97      0.97      0.97     57102
+
+checkpoint-14000
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.75      0.75      0.75       212
+   Cementing       0.73      0.95      0.83        20
+    Cleaning       0.82      0.77      0.79        99
+     CloseTo       0.98      0.95      0.96     17118
+     Cutting       0.72      0.63      0.67        46
+    Drilling       0.96      0.92      0.94        25
+   Hammering       0.84      0.69      0.76        54
+     Holding       0.94      0.76      0.84       901
+     LyingOn       1.00      0.95      0.98      1161
+   Operating       0.91      0.93      0.92       104
+   Preparing       0.79      0.85      0.82       379
+      Sawing       0.80      0.82      0.81        40
+    Suturing       0.80      0.20      0.32        20
+    Touching       0.86      0.85      0.85       577
+        none       0.97      0.99      0.98     36346
+
+    accuracy                           0.97     57102
+   macro avg       0.86      0.80      0.82     57102
+weighted avg       0.97      0.97      0.97     57102
+
+Rest of the epochs are all between 0.8 and 0.82
+Train result:
+              precision    recall  f1-score   support
+
+   Assisting       1.00      1.00      1.00       576
+   Cementing       1.00      1.00      1.00        61
+    Cleaning       1.00      1.00      1.00       303
+     CloseTo       1.00      1.00      1.00     51170
+     Cutting       0.98      1.00      0.99       119
+    Drilling       1.00      1.00      1.00        62
+   Hammering       1.00      1.00      1.00       151
+     Holding       1.00      0.99      1.00      2616
+     LyingOn       1.00      1.00      1.00      3485
+   Operating       0.99      0.99      0.99       306
+   Preparing       1.00      1.00      1.00      1314
+      Sawing       0.98      1.00      0.99       125
+    Suturing       1.00      1.00      1.00        82
+    Touching       0.99      0.99      0.99      1044
+        none       1.00      1.00      1.00     91232
+
+    accuracy                           1.00    152646
+   macro avg       1.00      1.00      1.00    152646
+weighted avg       1.00      1.00      1.00    152646
+

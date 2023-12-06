@@ -66,11 +66,11 @@ def scene_graph_to_string(scene_graph, human_idx_to_name):
     return out
 
 
-def apply_template(image_path, scene_graph):
+def apply_template(image_path, scene_graph, timepoint):
     human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
     id = f'{image_path.parent.parent.stem}/{image_path.stem}'
 
-    sample = {'id': id, 'image': str(image_path.absolute()),
+    sample = {'id': id, 'image': str(image_path.absolute()), 'timepoint': timepoint,
               "conversations": [
                   {
                       "from": "human",
@@ -118,13 +118,14 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
             for permutation_idx in range(n_permutations):  # TODO does id need to be unique? because right now it is not
                 shuffle(relations)  # order should be random
                 scene_graph_string = scene_graph_to_string(relations, human_idx_to_name)
-                sample = apply_template(image_path, scene_graph_string)
+                sample = apply_template(image_path, scene_graph_string, timepoint=int(pcd_idx))
                 samples.append(sample)
 
     return samples
 
 
 def main():
+    N_PERM = 25
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--config', type=str, default='example.json', help='configuration file name. Relative path under given path')
     args = parser.parse_args()
@@ -141,7 +142,7 @@ def main():
     train_dataset = ORDataset(config, 'train', shuffle_objs=True)
     val_dataset = ORDataset(config, 'val')
 
-    train_samples = generate_finetuning_samples_from_dataset(train_dataset)
+    train_samples = generate_finetuning_samples_from_dataset(train_dataset, n_permutations=N_PERM)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -154,10 +155,13 @@ def main():
                 token_freq.update(tokenized)
                 longest_sample = max(longest_sample, len(tokenized))
 
-    with open(f'data/llava_samples/train.json', 'w') as f:
+    # randomly shuffle the samples
+    shuffle(train_samples)
+
+    with open(f'data/llava_samples/train_{N_PERM}perm.json', 'w') as f:
         json.dump(train_samples, f, indent=4)
 
-    with open(f'data/llava_samples/train_token_freqs_7b.json', 'w') as f:
+    with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm.json', 'w') as f:
         json.dump(token_freq, f, indent=4)
 
 

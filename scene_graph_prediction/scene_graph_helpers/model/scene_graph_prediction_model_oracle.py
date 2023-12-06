@@ -1,6 +1,7 @@
 # !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import itertools
+import json
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -42,6 +43,13 @@ class OracleWrapper:
 
         self.model_name = get_model_name_from_path(model_path)
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
+        if 'temporality' in config and config['temporality'] == 'GT':
+            print('Loaidng temporality GT')
+            self.take_timepoint_to_memory_str = {}
+            with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str.json') as f:
+                self.take_timepoint_to_memory_str = json.load(f)
+            with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str.json') as f:
+                self.take_timepoint_to_memory_str.update(json.load(f))
 
     def forward(self, batch):
 
@@ -73,6 +81,13 @@ class OracleWrapper:
             inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
         else:
             inp = DEFAULT_IMAGE_TOKEN + '\n' + inp
+        if 'temporality' in self.config and self.config['temporality'] == 'GT':
+            take_idx, timepoint_idx, _ = batch['scan_id'].split('_')
+            take_idx = int(take_idx)
+            timepoint_idx = int(timepoint_idx)
+            take_timepoint = f'{take_idx}_{timepoint_idx}'
+            memory_str = self.take_timepoint_to_memory_str[take_timepoint]
+            inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
         conv.append_message(conv.roles[0], inp)
 
         conv.append_message(conv.roles[1], None)
