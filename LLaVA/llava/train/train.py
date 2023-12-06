@@ -36,6 +36,7 @@ from llava.model import *
 from llava.mm_utils import tokenizer_image_token
 
 from PIL import Image
+from torchinfo import summary
 
 local_rank = None
 
@@ -77,6 +78,7 @@ class TrainingArguments(transformers.TrainingArguments):
     optim: str = field(default="adamw_torch")
     remove_unused_columns: bool = field(default=False)
     freeze_mm_mlp_adapter: bool = field(default=False)
+    unfreeze_n_vision_tower_layers: Optional[int] = field(default=None)
     mpt_attn_impl: Optional[str] = field(default="triton")
     model_max_length: int = field(
         default=512,
@@ -946,6 +948,12 @@ def train():
         model.config.mm_use_im_patch_token = model_args.mm_use_im_patch_token
         model.initialize_vision_tokenizer(model_args, tokenizer=tokenizer)
 
+        if training_args.unfreeze_n_vision_tower_layers is not None:
+            print(f'Unfreezing last {training_args.unfreeze_n_vision_tower_layers} layers of vision tower')
+            for layer in model.get_vision_tower().vision_tower.vision_model.encoder.layers[-training_args.unfreeze_n_vision_tower_layers:]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+
     if training_args.bits in [4, 8]:
         from peft.tuners.lora import LoraLayer
         for name, module in model.named_modules():
@@ -979,8 +987,7 @@ def train():
                     model.save_pretrained(checkpoint_dir, state_dict=state_dict)
                     torch.save(non_lora_state_dict, os.path.join(checkpoint_dir, 'non_lora_trainables.bin'))
 
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Trainable parameters: {trainable_params:,}")
+    summary(model, depth=5, col_names=['num_params', 'trainable'])
 
     from llava.train.llama_patch import upcast_layer_for_flash_attention
     model = upcast_layer_for_flash_attention(model, torch.bfloat16)

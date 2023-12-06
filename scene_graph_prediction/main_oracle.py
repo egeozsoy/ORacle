@@ -76,13 +76,18 @@ def main():
 
 if __name__ == '__main__':
     # TODO use multiview. test concat, vs average vs max.
-    # TODO How to avoid closeTo. Maybe curate the training dataset, or simply do without closeTo. Or maybe adjust the order that all none close to stuff is done first
-    # TODO only evaluvate fully finished models, otherwise it is just wrong
     # TODO repeat log vs linear test
-    # TODO experiment with adjusting the vocabulary. It is not trivial but should be possible
-    # TODO validation during training
-    # TODO we could also do a projection layer only training first to align and reduce overfitting?
-    # TODO unfreeze some backbone layers
+    # TODO see if 50 epochs are really necessary. Maybe 20 is enough.
+    # TODO only changes. OR/OP scene graph. Used as memory.
+
+    #             28120    part-1   oracle ege_oezs  R      17:07      1 unimatrix1 # temporal training
+    #             28132    part-1   oracle ege_oezs  R       0:02      1 unimatrix1 # 20 perm, 12 unfreeze, nontemporal training
+
+    # TODO eval 10_perm and 20_perm as well. but 100 perm looks good!
+    # TODO temporality using surgery SG. needs adaptation in train and eval. Initial version uses GT, should be online at some point
+    # TODO novel view evaluvation.
+    # TODo for multiview: Nximages -> Clip Model -> NxCLIP embeddings (Nx576x1024) -> ImagePooler(2-4 layers max) -> CLIP Embedding(576x1024) -> Projection layer -> (576x4096) -> LLM
+    # Cleanup helper: rm -rf */checkpoint-*/global_step*z
 
     import subprocess
 
