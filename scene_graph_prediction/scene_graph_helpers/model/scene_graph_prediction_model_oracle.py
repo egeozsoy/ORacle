@@ -205,7 +205,7 @@ class OracleWrapper:
                 optimal_human_index_map = human_index_map
         return optimal_human_index_map
 
-    def validate(self, dataloader, limit_val_batches=None):
+    def validate(self, dataloader, limit_val_batches=None, logging_information=None):
         take_rel_preds = defaultdict(list)
         take_rel_gts = defaultdict(list)
         # if limit_val_batches is int, then limit the number of batches to this number, if float, then limit the number of batches to this fraction of the total number of batches.
@@ -226,6 +226,8 @@ class OracleWrapper:
             human_roles = set()  # Need to be mapped for this evaluation
             for triplet in triplet_str:
                 triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
+                # sometimes something like 591: circulator... remains from with memory training, remove this part
+                triplet = triplet.split(': ')[-1].strip()
                 if triplet == '':
                     continue
                 triplet = triplet.split(',')
@@ -291,13 +293,13 @@ class OracleWrapper:
                         take_rel_preds[batch['take_idx']].append(self.relation_names_lower_case.index('none'))
 
         self.val_take_rel_preds, self.val_take_rel_gts = take_rel_preds, take_rel_gts
-        self.evaluate_predictions(None, 'val')
+        self.evaluate_predictions(None, 'val', logging_information=logging_information)
         self.reset_metrics(split='val')
 
     # def test_epoch_end(self, outputs):
     #     return self.validation_epoch_end(outputs)
 
-    def evaluate_predictions(self, epoch_loss, split):
+    def evaluate_predictions(self, epoch_loss, split, logging_information=None):
         if split == 'train':
             take_rel_preds = self.train_take_rel_preds
             take_rel_gts = self.train_take_rel_gts
@@ -316,6 +318,13 @@ class OracleWrapper:
             all_rel_preds.extend(rel_preds)
 
             cls_report = classification_report(rel_gts, rel_preds, labels=list(range(len(self.relationNames))),
+                                               target_names=self.relationNames, output_dict=True)
+            for rel_name in self.relationNames:
+                for score_type in ['precision', 'recall', 'f1-score']:
+                    # self.log(f'{rel_name}/{take_idx}_{score_type[:2].upper()}', cls_report[rel_name][score_type], rank_zero_only=True)
+                    logging_information['logger'].log_metrics({f'{rel_name}/{take_idx}_{score_type[:2].upper()}': cls_report[rel_name][score_type]}, step=logging_information['checkpoint_id'])
+
+            cls_report = classification_report(rel_gts, rel_preds, labels=list(range(len(self.relationNames))),
                                                target_names=self.relationNames)
             print(f'\nTake {take_idx}\n')
             print(cls_report)
@@ -323,6 +332,12 @@ class OracleWrapper:
         results = classification_report(all_rel_gts, all_rel_preds, labels=list(range(len(self.relationNames))),
                                         target_names=self.relationNames, output_dict=True)
         macro_f1 = results['macro avg']['f1-score']
+        if logging_information is not None:
+            # logging_information will have a key use it to log to wandb. It will also have a checkpoint int, which we also want to log (similar to epoch). Also we want to use the split to log as train or val
+            logging_information['logger'].log_metrics({f'{logging_information["split"]}_precision': results['macro avg']['precision']}, step=logging_information['checkpoint_id'])
+            logging_information['logger'].log_metrics({f'{logging_information["split"]}_recall': results['macro avg']['recall']}, step=logging_information['checkpoint_id'])
+            logging_information['logger'].log_metrics({f'{logging_information["split"]}_macro_f1': results['macro avg']['f1-score']}, step=logging_information['checkpoint_id'])
+
         print(f'{split} Results:\n')
         cls_report = classification_report(all_rel_gts, all_rel_preds, labels=list(range(len(self.relationNames))),
                                            target_names=self.relationNames)

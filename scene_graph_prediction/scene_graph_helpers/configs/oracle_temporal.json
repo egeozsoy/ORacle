@@ -34,7 +34,8 @@
     "w_bg": 1.0,
     "NONE_RATIO": 1.0,
     "FULL_IMAGE_EMBEDDING_SIZE": 768,
-    "IMAGE_MODEL": "tf_efficientnet_b5_ns"
+    "IMAGE_MODEL": "tf_efficientnet_b5_ns",
+    "mv_type": "learned"
   },
   "dataset": {
     "root": [

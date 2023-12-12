@@ -113,65 +113,15 @@ def parse_llava_sg(llava_sg):
     return triplets
 
 
-def surgery_sg_to_memory_str(surgery_sg_triplets):
+def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint):
     memory_str = ''
-    for timepoint, (sub, pred, obj) in surgery_sg_triplets:
-        memory_str += f'{timepoint}: {sub},{pred},{obj}; '
+    for timepoint, (sub, pred,
+                    obj) in surgery_sg_triplets:  # TODO actually intended was a different format. where we list per timepoint the changes. Then you would only have one T-N for each timepoint, then the scene graph.
+        rel_timepoint = current_timepoint - timepoint
+        # memory_str += f'{timepoint}: {sub},{obj},{pred}; '
+        # instead we use relative timepoint with T-minus notation
+        memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '
 
     if memory_str == '':
         return ''
     return memory_str[:-2]
-
-
-def main():
-    train_file_path = Path('data/llava_samples/train_25perm.json')
-    with train_file_path.open('r') as f:
-        llava_scene_graphs = json.load(f)
-    take_to_history = {}
-    take_timepoint_to_memory_str = {}
-    for take_int in range(1, 11):
-        take_scene_graphs = [elem for elem in llava_scene_graphs if extract_take_int_from_image_path(elem['image']) == take_int]
-        # make unique
-        take_scene_graphs = list({elem['image']: elem for elem in take_scene_graphs}.values())
-        # sort by image_path
-        take_scene_graphs = sorted(take_scene_graphs, key=lambda x: x['image'])
-        take_scene_graphs_reformatted = []
-        for take_scene_graph in take_scene_graphs:
-            scene_graph = parse_llava_sg(take_scene_graph['conversations'][1]['value'])
-            take_scene_graphs_reformatted.append({'timepoint_idx': take_scene_graph['timepoint'], 'scene_graph': scene_graph})
-
-        surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient')
-        with open(f'data/llava_samples/surgery_sg_{take_int}.json', 'w') as f:
-            json.dump(surgery_sg_triplets, f)
-        take_to_history[take_int] = surgery_sg_triplets
-
-    # produce a new file with _history appended to the name
-    train_file_with_history_path = train_file_path.parent / f'{train_file_path.stem}_history{train_file_path.suffix}'
-    take_timepoint_to_memory_str_path = train_file_path.parent / f'{train_file_path.stem}_take_timepoint_to_memory_str.json'
-    llava_scene_graphs_with_history = []
-    for llava_scene_graph in tqdm(llava_scene_graphs, desc='Adding history to LLAVA scene graphs'):
-        image_path = llava_scene_graph['image']
-        image_path = Path(image_path)
-        take_int = extract_take_int_from_image_path(image_path)
-        surgery_sg_triplets = take_to_history[take_int]
-        timepoint = llava_scene_graph['timepoint']
-        surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint]
-        memory_str = surgery_sg_to_memory_str(surgery_sg_triplets)
-        take_timepoint_to_memory_str[f'{take_int}_{timepoint}'] = memory_str
-        input = llava_scene_graph['conversations'][0]['value']
-        input = input.replace('<image>\n', f'<image>\nMemory: {memory_str}.')
-        llava_scene_graph['conversations'][0]['value'] = input
-        llava_scene_graphs_with_history.append(llava_scene_graph)
-
-    # TODO for each timepoint in each surgery export the following: Previous Surgery SG, Current SG, Current Surgery SG (which is the correct merge of the previous and current SG, by deciding to add something to the surgery SG (can be also a stopped action removing something)
-    # TODO optionally enchance training data for each timepoint by adding previous Surgery SG to them.
-
-    with train_file_with_history_path.open('w') as f:
-        json.dump(llava_scene_graphs_with_history, f)
-
-    with take_timepoint_to_memory_str_path.open('w') as f:
-        json.dump(take_timepoint_to_memory_str, f)
-
-
-if __name__ == '__main__':
-    main()

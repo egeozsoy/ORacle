@@ -1,9 +1,11 @@
+import random
 import warnings
 from collections import Counter
 from random import shuffle
 import transformers
 
 from helpers.configurations import OR_4D_DATA_ROOT_PATH
+from scene_graph_prediction.llava_helpers.scene_graph_converters import extract_take_int_from_image_path, parse_llava_sg, llava_sg_to_surgery_sg, surgery_sg_to_memory_str
 
 warnings.filterwarnings('ignore')
 import argparse
@@ -86,7 +88,7 @@ def apply_template(image_paths, scene_graph, timepoint):
     return sample
 
 
-def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(1,2)):
+def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,)):
     samples = []
     for index in range(len(dataset)):
         scan_id = dataset.scans[index]
@@ -124,7 +126,15 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
 
 def main():
-    N_PERM = 20
+    N_PERM = 25
+    ADD_TEMPORAL = True
+    WITH_TEMPORAL_AUG = True
+    MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
+    SPLIT = 'train'
+    # TODO other stuff we want to integrate we can do here as well.
+    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug'
+    print(f'Creating samples for LLAVA dataset with name {NAME}')
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--config', type=str, default='example.json', help='configuration file name. Relative path under given path')
     args = parser.parse_args()
@@ -138,16 +148,15 @@ def main():
         use_fast=False,
     )
 
-    train_dataset = ORDataset(config, 'train', shuffle_objs=True)
-    val_dataset = ORDataset(config, 'val')
+    dataset = ORDataset(config, SPLIT)
 
-    train_samples = generate_finetuning_samples_from_dataset(train_dataset, n_permutations=N_PERM)
+    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
     token_freq = Counter()
     longest_sample = -1
-    for sample in train_samples:
+    for sample in samples:
         for conversation in sample['conversations']:
             if conversation['from'] == 'gpt':
                 tokenized = tokenizer.tokenize(conversation['value'])
@@ -155,13 +164,75 @@ def main():
                 longest_sample = max(longest_sample, len(tokenized))
 
     # randomly shuffle the samples
-    shuffle(train_samples)
+    shuffle(samples)
 
-    with open(f'data/llava_samples/train_{N_PERM}perm_2_view.json', 'w') as f:
-        json.dump(train_samples, f, indent=4)
+    if ADD_TEMPORAL:
+        print('Adding temporal information...')
+        take_to_history = {}
+        take_timepoint_to_memory_str = {}
 
-    with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm_2_view.json', 'w') as f:
-        json.dump(token_freq, f, indent=4)
+        for take_int in range(1, 11):
+            take_scene_graphs = [elem for elem in samples if extract_take_int_from_image_path(elem['image']) == take_int]
+            # make unique
+            take_scene_graphs = list({elem['image']: elem for elem in take_scene_graphs}.values())
+            # sort by image_path
+            take_scene_graphs = sorted(take_scene_graphs, key=lambda x: x['image'])
+            take_scene_graphs_reformatted = []
+            for take_scene_graph in take_scene_graphs:
+                scene_graph = parse_llava_sg(take_scene_graph['conversations'][1]['value'])
+                take_scene_graphs_reformatted.append({'timepoint_idx': take_scene_graph['timepoint'], 'scene_graph': scene_graph})
+
+            surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient')
+            with open(f'data/llava_samples/surgery_sg_{take_int}.json', 'w') as f:
+                json.dump(surgery_sg_triplets, f)
+            take_to_history[take_int] = surgery_sg_triplets
+
+        llava_scene_graphs_with_history = []
+        for llava_scene_graph in samples:
+            image_path = llava_scene_graph['image']
+            image_path = Path(image_path)
+            take_int = extract_take_int_from_image_path(image_path)
+            surgery_sg_triplets = take_to_history[take_int]
+            timepoint = llava_scene_graph['timepoint']
+            surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint]
+            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint)
+            take_timepoint_to_memory_str[f'{take_int}_{timepoint}'] = memory_str
+            input = llava_scene_graph['conversations'][0]['value']
+
+            if WITH_TEMPORAL_AUG:
+                p = random.random()
+                if p < 0.5:
+                    memory_str = None
+                elif p < 0.666:
+                    short_term_surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] > timepoint - 20]
+                    memory_str = surgery_sg_to_memory_str(short_term_surgery_sg_triplets, current_timepoint=timepoint)
+                elif p < 0.833:
+                    long_term_surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] <= timepoint - 20]
+                    memory_str = surgery_sg_to_memory_str(long_term_surgery_sg_triplets, current_timepoint=timepoint)
+
+            if memory_str is not None:
+                if MEMORY_INDICATOR == 'single':
+                    input = input.replace('<image>\n', f'<image>\nMemory: {memory_str}.')
+                elif MEMORY_INDICATOR == 'double':
+                    input = input.replace('<image>\n', f'<image>\n<memory_start>: {memory_str}<memory_end>.')
+                else:
+                    raise NotImplementedError
+
+            input = input.replace('Describe this image', 'Describe this image at timepoint T')  # add timepoint to the question
+            llava_scene_graph['conversations'][0]['value'] = input
+            llava_scene_graphs_with_history.append(llava_scene_graph)
+
+        samples = llava_scene_graphs_with_history
+
+        with open(f'data/llava_samples/{NAME}_take_timepoint_to_memory_str.json', 'w') as f:
+            json.dump(take_timepoint_to_memory_str, f)
+
+    with open(f'data/llava_samples/{NAME}.json', 'w') as f:
+        json.dump(samples, f, indent=4)
+
+    if SPLIT == 'train' and not ADD_TEMPORAL:
+        with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm.json', 'w') as f:
+            json.dump(token_freq, f, indent=4)
 
 
 if __name__ == '__main__':
