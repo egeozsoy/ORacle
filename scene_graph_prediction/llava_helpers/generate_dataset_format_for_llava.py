@@ -86,7 +86,7 @@ def apply_template(image_paths, scene_graph, timepoint):
     return sample
 
 
-def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,)):
+def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(1,2)):
     samples = []
     for index in range(len(dataset)):
         scan_id = dataset.scans[index]
@@ -124,7 +124,7 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
 
 def main():
-    N_PERM = 25
+    N_PERM = 20
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--config', type=str, default='example.json', help='configuration file name. Relative path under given path')
     args = parser.parse_args()
@@ -157,10 +157,10 @@ def main():
     # randomly shuffle the samples
     shuffle(train_samples)
 
-    with open(f'data/llava_samples/train_{N_PERM}perm.json', 'w') as f:
+    with open(f'data/llava_samples/train_{N_PERM}perm_2_view.json', 'w') as f:
         json.dump(train_samples, f, indent=4)
 
-    with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm.json', 'w') as f:
+    with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm_2_view.json', 'w') as f:
         json.dump(token_freq, f, indent=4)
 
 
