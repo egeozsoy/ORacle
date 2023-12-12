@@ -20,6 +20,25 @@ def config_loader(config_path: str):
     return config
 
 
+def load_checkpoint_data(file_path):
+    if Path(file_path).exists():
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    return {}
+
+
+def update_checkpoint_data(file_path, model_name, checkpoint_id, wandb_run_id=None):
+    data = load_checkpoint_data(file_path)
+    if model_name not in data:
+        data[model_name] = {"checkpoints": [], "wandb_run_id": wandb_run_id}
+    if checkpoint_id not in data[model_name]["checkpoints"]:
+        data[model_name]["checkpoints"].append(checkpoint_id)
+    if wandb_run_id:
+        data[model_name]["wandb_run_id"] = wandb_run_id
+    with open(file_path, 'w') as file:
+        json.dump(data, file)
+
+
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--config', type=str, default='example.json', help='configuration file name. Relative path under given path')
@@ -27,7 +46,7 @@ def main():
     args = parser.parse_args()
     pl.seed_everything(42, workers=True)
     config = config_loader(args.config)
-    mode = 'evaluate'  # can be evaluate/infer
+    mode = 'eval_all'  # can be evaluate/infer/eval_all
 
     name = args.config.replace('.json', '')
 
@@ -43,6 +62,40 @@ def main():
                               weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
                               model_path=args.model_path)
         model.validate(eval_loader)
+    elif mode == 'eval_all':
+        print('Evaluating all checkpoints')
+
+        evaluated_file = 'evaluated_checkpoints.json'
+        checkpoint_data = load_checkpoint_data(evaluated_file)
+        model_path = Path(args.model_path)
+        model_name = model_path.name
+        eval_every_n_checkpoints = 2
+        wandb_run_id = checkpoint_data.get(model_name, {}).get("wandb_run_id", None)
+        logger = pl.loggers.WandbLogger(project='oracle_evals', name=model_name, save_dir='logs', offline=False, id=wandb_run_id)
+        train_dataset = ORDataset(config, 'train', shuffle_objs=True)
+        eval_dataset = ORDataset(config, 'val')
+        eval_dataset_for_train = ORDataset(config, 'train')
+        for checkpoint_idx, checkpoint in enumerate(sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))):
+            if checkpoint_idx % eval_every_n_checkpoints != 0:
+                print(f'Skipping checkpoint: {checkpoint}')
+                continue
+            checkpoint_id = int(checkpoint.name.split('-')[-1])
+            if model_name in checkpoint_data and str(checkpoint_id) in checkpoint_data[model_name]["checkpoints"]:
+                print(f'Checkpoint {checkpoint_id} for model {model_name} already evaluated. Skipping.')
+                continue
+            print(f'Evaluating checkpoint: {checkpoint}...')
+            train_loader = DataLoader(eval_dataset_for_train, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+                                      collate_fn=eval_dataset.collate_fn)
+            eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+                                     collate_fn=eval_dataset.collate_fn)
+            model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
+                                  weights_obj=train_dataset.w_cls_obj,
+                                  weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
+                                  model_path=str(checkpoint))
+            model.validate(train_loader, limit_val_batches=1000, logging_information={'split': 'train', "logger": logger, "checkpoint_id": checkpoint_id})
+            model.validate(eval_loader, logging_information={'split': 'val', "logger": logger, "checkpoint_id": checkpoint_id})
+            update_checkpoint_data(evaluated_file, model_name, checkpoint_id, logger.experiment.id)
+
     elif mode == 'infer':
         raise NotImplementedError('TODO')
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
@@ -79,15 +132,22 @@ if __name__ == '__main__':
     # TODO repeat log vs linear test
     # TODO see if 50 epochs are really necessary. Maybe 20 is enough.
     # TODO only changes. OR/OP scene graph. Used as memory.
+    # TODO image augmentations
+    # TODO log!!!
 
-    #             28120    part-1   oracle ege_oezs  R      17:07      1 unimatrix1 # temporal training
-    #             28132    part-1   oracle ege_oezs  R       0:02      1 unimatrix1 # 20 perm, 12 unfreeze, nontemporal training
-
-    # TODO eval 10_perm and 20_perm as well. but 100 perm looks good!
-    # TODO temporality using surgery SG. needs adaptation in train and eval. Initial version uses GT, should be online at some point
+    # TODO only train with one take or a few
+    # TODO temporality using surgery SG. needs adaptation in train and eval. Initial version uses GT, should be online at some point+
     # TODO novel view evaluvation.
+    # TODO novel action/role evaluation.
+    # TODO wrong object assisgnments with description. Task assignments wrong.
+    # TODO phase description based on scene graphs -> predict scene graph.
+    # TODO abnormality detection. Knowledge describes what is normal.
+    # TODO red circle based augmentations
+    # TODO sterility breech detection
+    # TODO object1 object2 etc and what they mean are hidden in the knowledge. The knowledge can be as explicit as object1: head_surgeon object2: drill but also something like object1: -is a person that does X,Y,Z. Analogous for relations.
+    # TODO fake patient knowledge: Aneshtesia or not.
     # TODo for multiview: Nximages -> Clip Model -> NxCLIP embeddings (Nx576x1024) -> ImagePooler(2-4 layers max) -> CLIP Embedding(576x1024) -> Projection layer -> (576x4096) -> LLM
-    # Cleanup helper: rm -rf */checkpoint-*/global_step*z
+    # Cleanup helper: rm -rf */checkpoint-*/global_step*
 
     import subprocess
 
