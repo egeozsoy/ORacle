@@ -45,11 +45,19 @@ class OracleWrapper:
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
         self.model.config.mv_type = self.mconfig['mv_type']
         if 'temporality' in config and config['temporality'] == 'GT':
-            print('Loaidng temporality GT')
+            print('Loading temporality GT')
             self.take_timepoint_to_memory_str = {}
-            with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str.json') as f:
+            # with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str.json') as f: # TODO adapt this
+            #     self.take_timepoint_to_memory_str = json.load(f)
+            # with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str.json') as f:
+            #     self.take_timepoint_to_memory_str.update(json.load(f))
+            # with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str_predonly.json') as f:  # TODO adapt this
+            #     self.take_timepoint_to_memory_str = json.load(f)
+            # with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str_predonly.json') as f:
+            #     self.take_timepoint_to_memory_str.update(json.load(f))
+            with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str_relative.json') as f:  # TODO adapt this
                 self.take_timepoint_to_memory_str = json.load(f)
-            with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str.json') as f:
+            with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str_relative.json') as f:
                 self.take_timepoint_to_memory_str.update(json.load(f))
 
     def forward(self, batch):
@@ -88,7 +96,8 @@ class OracleWrapper:
             timepoint_idx = int(timepoint_idx)
             take_timepoint = f'{take_idx}_{timepoint_idx}'
             memory_str = self.take_timepoint_to_memory_str[take_timepoint]
-            inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
+            # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')  # TODO adapt this to the new prompt
+            inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\n<memory_start>: {memory_str}<memory_end>.\n')
         conv.append_message(conv.roles[0], inp)
 
         conv.append_message(conv.roles[1], None)

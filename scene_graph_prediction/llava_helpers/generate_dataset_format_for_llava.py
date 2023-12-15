@@ -37,11 +37,14 @@ def load_image_paths(scan_id_no_split):
     return image_paths
 
 
-def scene_graph_to_string(scene_graph, human_idx_to_name):
+def scene_graph_to_string(scene_graph, human_idx_to_name, SG_INDICATOR='double'):
     '''
     Scene graph is a list of relations in the form of (subject, relation, object)
     '''
-    out = ''
+    if SG_INDICATOR == 'double':
+        out = '<SG> '
+    else:
+        raise NotImplementedError
     for (subject, relation, object) in scene_graph:
         # optionally modify subject, relation, object here
         if 'human_' in subject:
@@ -60,16 +63,21 @@ def scene_graph_to_string(scene_graph, human_idx_to_name):
         #     continue
         out += f'{subject},{object},{relation}; '
 
-    # Remove last comma, put end token
-    if out:
-        out = out[:-2] + '.'
-    else:
-        out = '.'  # empty scene graph
+    # # Remove last comma, put end token
+    # if out:
+    #     out = out[:-2] + '.'
+    # else:
+    #     out = '.'  # empty scene graph
+    if SG_INDICATOR == 'double':
+        # remove the last ";" and add the end token.
+        out = out.rstrip('; ') + ' </SG>'
     return out
 
 
 def apply_template(image_paths, scene_graph, timepoint):
-    human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
+    # human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
+    human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
+    # TODO potentially modify the input to say <SG>
     id = f'{image_paths[0].parent.parent.stem}/{image_paths[0].stem}'
 
     sample = {'id': id, 'timepoint': timepoint, 'image': [str(image_path.absolute()) for image_path in image_paths] if len(image_paths) > 1 else str(image_paths[0].absolute()),
@@ -88,7 +96,7 @@ def apply_template(image_paths, scene_graph, timepoint):
     return sample
 
 
-def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,)):
+def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,), SG_INDICATOR='double'):
     samples = []
     for index in range(len(dataset)):
         scan_id = dataset.scans[index]
@@ -118,7 +126,7 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
         for permutation_idx in range(n_permutations):  # TODO does id need to be unique? because right now it is not
             shuffle(relations)  # order should be random
-            scene_graph_string = scene_graph_to_string(relations, human_idx_to_name)
+            scene_graph_string = scene_graph_to_string(relations, human_idx_to_name, SG_INDICATOR=SG_INDICATOR)
             sample = apply_template(image_paths, scene_graph_string, timepoint=int(pcd_idx))
             samples.append(sample)
 
@@ -130,9 +138,10 @@ def main():
     ADD_TEMPORAL = True
     WITH_TEMPORAL_AUG = True
     MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
+    SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SPLIT = 'train'
     # TODO other stuff we want to integrate we can do here as well.
-    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug'
+    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{SG_INDICATOR}sg'
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -150,7 +159,7 @@ def main():
 
     dataset = ORDataset(config, SPLIT)
 
-    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM)
+    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -218,7 +227,7 @@ def main():
                 else:
                     raise NotImplementedError
 
-            input = input.replace('Describe this image', 'Describe this image at timepoint T')  # add timepoint to the question
+            # input = input.replace('Describe this image', 'Describe this image at timepoint T')  # add timepoint to the question
             llava_scene_graph['conversations'][0]['value'] = input
             llava_scene_graphs_with_history.append(llava_scene_graph)
 

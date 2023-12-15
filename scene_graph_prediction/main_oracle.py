@@ -1,3 +1,8 @@
+import os
+
+os.environ["WANDB_DIR"] = os.path.abspath("wandb")
+os.environ["TMPDIR"] = os.path.abspath("wandb")
+
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -69,14 +74,16 @@ def main():
         checkpoint_data = load_checkpoint_data(evaluated_file)
         model_path = Path(args.model_path)
         model_name = model_path.name
-        eval_every_n_checkpoints = 2
+        eval_every_n_checkpoints = 4
         wandb_run_id = checkpoint_data.get(model_name, {}).get("wandb_run_id", None)
         logger = pl.loggers.WandbLogger(project='oracle_evals', name=model_name, save_dir='logs', offline=False, id=wandb_run_id)
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
         eval_dataset = ORDataset(config, 'val')
         eval_dataset_for_train = ORDataset(config, 'train')
-        for checkpoint_idx, checkpoint in enumerate(sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))):
-            if checkpoint_idx % eval_every_n_checkpoints != 0:
+        # always eval last checkpoint
+        checkpoints = sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))
+        for checkpoint_idx, checkpoint in enumerate(checkpoints):
+            if checkpoint_idx % eval_every_n_checkpoints != 0 and checkpoint_idx != len(checkpoints) - 1:
                 print(f'Skipping checkpoint: {checkpoint}')
                 continue
             checkpoint_id = int(checkpoint.name.split('-')[-1])
