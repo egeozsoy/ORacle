@@ -143,8 +143,11 @@ class LlavaMetaForCausalLM(ABC):
     def encode_images_pooled(self, images, split_sizes):
         image_pooler = self.get_image_pooler()
         image_features = self.get_model().get_vision_tower()(images)
-        image_features = torch.split(image_features, split_sizes, dim=0)
-        image_features = image_pooler(torch.stack(image_features).flatten(1, 2))
+        if split_sizes is not None:
+            image_features = torch.split(image_features, split_sizes, dim=0)
+            image_features = image_pooler(torch.stack(image_features).flatten(1, 2))
+        else:
+            image_features = image_pooler(image_features)
         image_features = self.get_model().mm_projector(image_features)
         return image_features
 
@@ -199,6 +202,8 @@ class LlavaMetaForCausalLM(ABC):
         else:
             if getattr(self.config, 'mv_type') == "concat_pooled":
                 image_features = self.encode_images_concat_pool(images).to(self.device)
+            elif getattr(self.config, 'mv_type') == "learned":
+                image_features = self.encode_images_pooled(images, None).to(self.device)
             else:
                 image_features = self.encode_images(images).to(self.device)
 

@@ -1,3 +1,7 @@
+import os
+os.environ["WANDB_DIR"] = os.path.abspath("wandb")
+os.environ["TMPDIR"] = os.path.abspath("wandb")
+
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -55,7 +59,7 @@ def main():
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
         eval_dataset = ORDataset(config, 'val')
         # eval_dataset = ORDataset(config, 'train')
-        eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+        eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
         model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,
@@ -69,7 +73,7 @@ def main():
         checkpoint_data = load_checkpoint_data(evaluated_file)
         model_path = Path(args.model_path)
         model_name = model_path.name
-        eval_every_n_checkpoints = 2
+        eval_every_n_checkpoints = 5
         wandb_run_id = checkpoint_data.get(model_name, {}).get("wandb_run_id", None)
         logger = pl.loggers.WandbLogger(project='oracle_evals', name=model_name, save_dir='logs', offline=False, id=wandb_run_id)
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
@@ -79,14 +83,17 @@ def main():
             if checkpoint_idx % eval_every_n_checkpoints != 0:
                 print(f'Skipping checkpoint: {checkpoint}')
                 continue
+            if checkpoint_idx == 0:
+                print(f'Skipping checkpoint: {checkpoint}')
+                continue
             checkpoint_id = int(checkpoint.name.split('-')[-1])
             if model_name in checkpoint_data and str(checkpoint_id) in checkpoint_data[model_name]["checkpoints"]:
                 print(f'Checkpoint {checkpoint_id} for model {model_name} already evaluated. Skipping.')
                 continue
             print(f'Evaluating checkpoint: {checkpoint}...')
-            train_loader = DataLoader(eval_dataset_for_train, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            train_loader = DataLoader(eval_dataset_for_train, batch_size=1, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                       collate_fn=eval_dataset.collate_fn)
-            eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                      collate_fn=eval_dataset.collate_fn)
             model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                                   weights_obj=train_dataset.w_cls_obj,

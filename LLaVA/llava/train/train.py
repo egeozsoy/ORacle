@@ -13,19 +13,21 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-
+import math
 import os
 import copy
 from dataclasses import dataclass, field
 import json
 import logging
 import pathlib
-from typing import Dict, Optional, Sequence, List
+from typing import Dict, Optional, Sequence, List, Tuple
 
 import numpy as np
 import torch
 
 import transformers
+from torch import Tensor
+from torchvision.transforms import functional as F, InterpolationMode
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 from torch.utils.data import Dataset
@@ -70,6 +72,7 @@ class DataArguments:
     is_multimodal: bool = False
     image_folder: Optional[str] = field(default=None)
     image_aspect_ratio: str = 'square'
+    do_augment: bool = field(default=False)
 
 
 @dataclass
@@ -107,6 +110,7 @@ class TrainingArguments(transformers.TrainingArguments):
     lora_bias: str = "none"
     mm_projector_lr: Optional[float] = None
     group_by_modality_length: bool = field(default=False)
+    curriculum_learning_weights: Optional[str] = field(default=None)
 
 
 def maybe_zero_3(param, ignore_status=False, name=None):
@@ -628,6 +632,121 @@ def preprocess(
     return dict(input_ids=input_ids, labels=targets)
 
 
+def _apply_op(img: Tensor, op_name: str, magnitude: float,
+              interpolation: InterpolationMode, fill: Optional[List[float]]):
+    if op_name == "ShearX":
+        img = F.affine(img, angle=0.0, translate=[0, 0], scale=1.0, shear=[math.degrees(magnitude), 0.0],
+                       interpolation=interpolation, fill=fill)
+    elif op_name == "ShearY":
+        img = F.affine(img, angle=0.0, translate=[0, 0], scale=1.0, shear=[0.0, math.degrees(magnitude)],
+                       interpolation=interpolation, fill=fill)
+    elif op_name == "TranslateX":
+        img = F.affine(img, angle=0.0, translate=[int(magnitude), 0], scale=1.0,
+                       interpolation=interpolation, shear=[0.0, 0.0], fill=fill)
+    elif op_name == "TranslateY":
+        img = F.affine(img, angle=0.0, translate=[0, int(magnitude)], scale=1.0,
+                       interpolation=interpolation, shear=[0.0, 0.0], fill=fill)
+    elif op_name == "Rotate":
+        img = F.rotate(img, magnitude, interpolation=interpolation, fill=fill)
+    elif op_name == "Brightness":
+        img = F.adjust_brightness(img, 1.0 + magnitude)
+    elif op_name == "Color":
+        img = F.adjust_saturation(img, 1.0 + magnitude)
+    elif op_name == "Contrast":
+        img = F.adjust_contrast(img, 1.0 + magnitude)
+    elif op_name == "Sharpness":
+        img = F.adjust_sharpness(img, 1.0 + magnitude)
+    elif op_name == "Posterize":
+        img = F.posterize(img, int(magnitude))
+    elif op_name == "Solarize":
+        img = F.solarize(img, magnitude)
+    elif op_name == "AutoContrast":
+        img = F.autocontrast(img)
+    elif op_name == "Equalize":
+        img = F.equalize(img)
+    elif op_name == "Invert":
+        img = F.invert(img)
+    elif op_name == "Identity":
+        pass
+    else:
+        raise ValueError("The provided operator {} is not recognized.".format(op_name))
+    return img
+
+
+class TrivialAugmentWide(torch.nn.Module):
+    r"""Dataset-independent data-augmentation with TrivialAugment Wide, as described in
+    `"TrivialAugment: Tuning-free Yet State-of-the-Art Data Augmentation" <https://arxiv.org/abs/2103.10158>`.
+    If the image is torch Tensor, it should be of type torch.uint8, and it is expected
+    to have [..., 1 or 3, H, W] shape, where ... means an arbitrary number of leading dimensions.
+    If img is PIL Image, it is expected to be in mode "L" or "RGB".
+    Args:
+        num_magnitude_bins (int): The number of different magnitude values.
+        interpolation (InterpolationMode): Desired interpolation enum defined by
+            :class:`torchvision.transforms.InterpolationMode`. Default is ``InterpolationMode.NEAREST``.
+            If input is Tensor, only ``InterpolationMode.NEAREST``, ``InterpolationMode.BILINEAR`` are supported.
+        fill (sequence or number, optional): Pixel fill value for the area outside the transformed
+            image. If given a number, the value is used for all bands respectively.
+        """
+
+    def __init__(self, num_magnitude_bins: int = 31, interpolation: InterpolationMode = InterpolationMode.NEAREST,
+                 fill: Optional[List[float]] = None) -> None:
+        super().__init__()
+        self.num_magnitude_bins = num_magnitude_bins
+        self.interpolation = interpolation
+        self.fill = fill
+
+    def _augmentation_space(self, num_bins: int) -> Dict[str, Tuple[Tensor, bool]]:
+        return {
+            # op_name: (magnitudes, signed)
+            "Identity": (torch.tensor(0.0), False),
+            "ShearX": (torch.linspace(0.0, 0.99, num_bins), True),
+            "ShearY": (torch.linspace(0.0, 0.99, num_bins), True),
+            "TranslateX": (torch.linspace(0.0, 32.0, num_bins), True),
+            "TranslateY": (torch.linspace(0.0, 32.0, num_bins), True),
+            "Rotate": (torch.linspace(0.0, 135.0, num_bins), True),
+            "Brightness": (torch.linspace(0.0, 0.99, num_bins), True),
+            "Color": (torch.linspace(0.0, 0.99, num_bins), True),
+            "Contrast": (torch.linspace(0.0, 0.99, num_bins), True),
+            "Sharpness": (torch.linspace(0.0, 0.99, num_bins), True),
+            "Posterize": (8 - (torch.arange(num_bins) / ((num_bins - 1) / 6)).round().int(), False),
+            "Solarize": (torch.linspace(256.0, 0.0, num_bins), False),
+            "AutoContrast": (torch.tensor(0.0), False),
+            "Equalize": (torch.tensor(0.0), False),
+        }
+
+    def forward(self, img: Tensor) -> Tensor:
+        """
+            img (PIL Image or Tensor): Image to be transformed.
+        Returns:
+            PIL Image or Tensor: Transformed image.
+        """
+        fill = self.fill
+        if isinstance(img, Tensor):
+            if isinstance(fill, (int, float)):
+                fill = [float(fill)] * F.get_image_num_channels(img)
+            elif fill is not None:
+                fill = [float(f) for f in fill]
+
+        op_meta = self._augmentation_space(self.num_magnitude_bins)
+        op_index = int(torch.randint(len(op_meta), (1,)).item())
+        op_name = list(op_meta.keys())[op_index]
+        magnitudes, signed = op_meta[op_name]
+        magnitude = float(magnitudes[torch.randint(len(magnitudes), (1,), dtype=torch.long)].item()) \
+            if magnitudes.ndim > 0 else 0.0
+        if signed and torch.randint(2, (1,)):
+            magnitude *= -1.0
+
+        return _apply_op(img, op_name, magnitude, interpolation=self.interpolation, fill=fill)
+
+    def __repr__(self) -> str:
+        s = self.__class__.__name__ + '('
+        s += 'num_magnitude_bins={num_magnitude_bins}'
+        s += ', interpolation={interpolation}'
+        s += ', fill={fill}'
+        s += ')'
+        return s.format(**self.__dict__)
+
+
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
@@ -641,6 +760,10 @@ class LazySupervisedDataset(Dataset):
         self.tokenizer = tokenizer
         self.list_data_dict = list_data_dict
         self.data_args = data_args
+        if self.data_args.do_augment:
+            self.augment = TrivialAugmentWide()
+        else:
+            self.augment = None
 
     def __len__(self):
         return len(self.list_data_dict)
@@ -686,6 +809,7 @@ class LazySupervisedDataset(Dataset):
                             result = Image.new(pil_img.mode, (height, height), background_color)
                             result.paste(pil_img, ((height - width) // 2, 0))
                             return result
+
                     image = [expand2square(image, tuple(int(x * 255) for x in processor.image_mean)) for image in image]
                     image = [processor.preprocess(image, return_tensors='pt')['pixel_values'][0] for image in image]
                     # stack images
@@ -694,6 +818,8 @@ class LazySupervisedDataset(Dataset):
                     image = [processor.preprocess(image, return_tensors='pt')['pixel_values'][0] for image in image]
             else:
                 image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
+                if self.augment is not None:
+                    image = self.augment(image)  # TODO this is a lot
                 if self.data_args.image_aspect_ratio == 'pad':
                     def expand2square(pil_img, background_color):
                         width, height = pil_img.size
@@ -779,6 +905,41 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
     return dict(train_dataset=train_dataset,
                 eval_dataset=None,
                 data_collator=data_collator)
+
+
+def load_model_weights(ref_model_path, peft_model, device):
+    # Store the current requires_grad status
+    original_requires_grad = {name: param.requires_grad for name, param in peft_model.named_parameters()}
+
+    non_lora_trainables = torch.load(os.path.join(ref_model_path, 'non_lora_trainables.bin'), map_location='cpu')
+    non_lora_trainables = {(k[11:] if k.startswith('base_model.') else k): v for k, v in non_lora_trainables.items()}
+    if any(k.startswith('model.model.') for k in non_lora_trainables):
+        non_lora_trainables = {(k[6:] if k.startswith('model.') else k): v for k, v in non_lora_trainables.items()}
+
+    peft_model.base_model.model.load_state_dict(non_lora_trainables, strict=False)
+
+    from peft import PeftModel
+    print('Loading LoRA weights...')
+    ref_model = PeftModel.from_pretrained(copy.deepcopy(peft_model.base_model.model), ref_model_path)
+    peft_model.load_state_dict(ref_model.state_dict(), strict=False)
+    del ref_model
+
+    vision_tower = peft_model.base_model.model.get_vision_tower()
+    if not vision_tower.is_loaded:
+        vision_tower.load_model()
+    vision_tower.to(device=device, dtype=torch.float16)
+    # if non_lora_trainables contains something about vision_tower, load it
+    if non_lora_trainables is not None and any(k.startswith('model.vision_tower.') for k in non_lora_trainables):
+        new_vision_tower_state_dict = {}
+        for k, v in non_lora_trainables.items():  # we need remapping, because state_dict from model is always like model.vision_tower. It should be vision_tower.
+            if 'model.vision_tower.vision_tower.' in k:
+                new_k = k.replace('model.vision_tower.', '')
+                new_vision_tower_state_dict[new_k] = v
+        print('Loaded additional vision tower weights...')
+        vision_tower.load_state_dict(new_vision_tower_state_dict, strict=False)
+
+    for name, param in peft_model.named_parameters():
+        param.requires_grad = original_requires_grad[name]
 
 
 def train():
@@ -969,6 +1130,9 @@ def train():
 
     data_module = make_supervised_data_module(tokenizer=tokenizer,
                                               data_args=data_args)
+    if training_args.curriculum_learning_weights is not None:
+        print(f'Initializing curriculum learning from {training_args.curriculum_learning_weights}')
+        load_model_weights(training_args.curriculum_learning_weights, model, training_args.device)
 
     # save callback
     from transformers import TrainerCallback
