@@ -61,15 +61,15 @@ class ORDataset(Dataset):
             self.image_transform_post = T.Compose(self.full_image_transformations.transforms[2:])
 
     def collate_fn(self, batch):
-        batch = batch[0]
-        if 'obj_points' in batch:
-            batch['obj_points'] = batch['obj_points'].permute(0, 2, 1)
-        if 'rel_points' in batch:
-            batch['rel_points'] = batch['rel_points'].permute(0, 2, 1)
+        for idx, elem in enumerate(batch):
+            if 'obj_points' in elem:
+                elem['obj_points'] = elem['obj_points'].permute(0, 2, 1)
+            if 'rel_points' in elem:
+                elem['rel_points'] = elem['rel_points'].permute(0, 2, 1)
 
-        batch['gt_class'] = batch['gt_class'].flatten().long()
-        batch['edge_indices'] = batch['edge_indices'].t().contiguous()
-        batch['take_idx'] = int(batch['scan_id'].split('_')[0])
+            elem['gt_class'] = elem['gt_class'].flatten().long()
+            elem['edge_indices'] = elem['edge_indices'].t().contiguous()
+            elem['take_idx'] = int(elem['scan_id'].split('_')[0])
 
         return batch
 

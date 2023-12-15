@@ -61,7 +61,7 @@ class ImageEmbeddingPooler(nn.Module):
             hidden_size=self.embedding_dim,
             num_hidden_layers=2,  # Set the number of hidden layers to 2
             num_attention_heads=8,
-            intermediate_size=self.embedding_dim*2,
+            intermediate_size=self.embedding_dim*4,
             use_position_embeddings=True,
             max_position_embeddings=2304,
             use_bfloat16=True,

@@ -60,7 +60,7 @@ def main():
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
         eval_dataset = ORDataset(config, 'val')
         # eval_dataset = ORDataset(config, 'train')
-        eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+        eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
         model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,
@@ -91,9 +91,9 @@ def main():
                 print(f'Checkpoint {checkpoint_id} for model {model_name} already evaluated. Skipping.')
                 continue
             print(f'Evaluating checkpoint: {checkpoint}...')
-            train_loader = DataLoader(eval_dataset_for_train, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                       collate_fn=eval_dataset.collate_fn)
-            eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                      collate_fn=eval_dataset.collate_fn)
             model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                                   weights_obj=train_dataset.w_cls_obj,

@@ -17,12 +17,13 @@ from abc import ABC, abstractmethod
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector, build_image_pooler
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-
+import matplotlib.pyplot as plt
 
 class LlavaMetaModel:
 
@@ -104,11 +105,49 @@ class LlavaMetaForCausalLM(ABC):
         image_features = self.get_model().mm_projector(image_features)
         return image_features
 
+    def visualize_feature_maps(self, image_features, num_images=1, num_features=1):
+        # Convert to float32 for visualization
+        image_features = image_features.to(dtype=torch.float32)
+
+        fig, axes = plt.subplots(1, num_images, figsize=(15, 6))
+
+        if num_images == 1:  # This is to handle the case when there's only one image
+            axes = [axes]
+
+        for i in range(num_images):
+            for j in range(num_features):
+                # Visualize the j-th feature of the i-th image
+                ax = axes[i]
+                ax.imshow(image_features[i, j, :, :].detach().cpu(), cmap='viridis')
+                ax.set_title(f"Image {i + 1}, Feature {j + 1}")
+                ax.axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
+    def encode_images_concat_pool(self, images):
+        image_features = self.get_model().get_vision_tower()(images)
+        image_features = self.get_model().mm_projector(image_features)
+        # switch last two dimensions
+        image_features = image_features.permute(0, 2, 1)
+        # reshape to num_imgs x hidden_size x 24 x 24
+        image_features = image_features.reshape((image_features.shape[0], image_features.shape[1], 24, 24))
+        # max pooling
+        image_features = F.max_pool2d(image_features, kernel_size=2, stride=2)
+        # flatten to num_imgs x hidden_size x num_patches
+        image_features = image_features.reshape((image_features.shape[0], image_features.shape[1], -1))
+        # switch last two dimensions back
+        image_features = image_features.permute(0, 2, 1)
+        return image_features
+
     def encode_images_pooled(self, images, split_sizes):
         image_pooler = self.get_image_pooler()
         image_features = self.get_model().get_vision_tower()(images)
-        image_features = torch.split(image_features, split_sizes, dim=0)
-        image_features = image_pooler(torch.stack(image_features).flatten(1, 2))
+        if split_sizes is not None:
+            image_features = torch.split(image_features, split_sizes, dim=0)
+            image_features = image_pooler(torch.stack(image_features).flatten(1, 2))
+        else:
+            image_features = image_pooler(image_features)
         image_features = self.get_model().mm_projector(image_features)
         return image_features
 
@@ -137,6 +176,12 @@ class LlavaMetaForCausalLM(ABC):
                 split_sizes = [image.shape[0] for image in images]
                 image_features = torch.split(image_features, split_sizes, dim=0)
                 image_features = torch.stack([x.flatten(0, 1).to(self.device) for x in image_features])
+            if getattr(self.config, 'mv_type') == "concat_pooled":
+                concat_images = torch.cat([image for image in images], dim=0)
+                image_features = self.encode_images_concat_pool(concat_images)
+                split_sizes = [image.shape[0] for image in images]
+                image_features = torch.split(image_features, split_sizes, dim=0)
+                image_features = torch.stack([x.flatten(0, 1).to(self.device) for x in image_features])
             if getattr(self.config, 'mv_type') == "max":
                 concat_images = torch.cat([image for image in images], dim=0)
                 image_features = self.encode_images(concat_images)
@@ -155,7 +200,12 @@ class LlavaMetaForCausalLM(ABC):
                 image_features = self.encode_images_pooled(concat_images, split_sizes)
 
         else:
-            image_features = self.encode_images(images).to(self.device)
+            if getattr(self.config, 'mv_type') == "concat_pooled":
+                image_features = self.encode_images_concat_pool(images).to(self.device)
+            elif getattr(self.config, 'mv_type') == "learned":
+                image_features = self.encode_images_pooled(images, None).to(self.device)
+            else:
+                image_features = self.encode_images(images).to(self.device)
 
         # TODO: image start / end is not implemented here to support pretraining.
         if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):

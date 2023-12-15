@@ -44,6 +44,7 @@ class OracleWrapper:
         self.model_name = get_model_name_from_path(model_path)
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
         self.model.config.mv_type = self.mconfig['mv_type']
+        self.model.config.tokenizer_padding_side = "left"
         if 'temporality' in config and config['temporality'] == 'GT':
             print('Loading temporality GT')
             self.take_timepoint_to_memory_str = {}
@@ -71,39 +72,57 @@ class OracleWrapper:
         else:
             conv_mode = "llava_v0"
 
-        conv = conv_templates[conv_mode].copy()
+        batchsize = len(batch)
+        all_images = []
+        all_prompts = []
+        for elem in batch:
+            conv = conv_templates[conv_mode].copy()
 
-        images = []
-        for cam_idx in self.config['CAMERAS']:
-            images.append(Image.open(batch['image_paths'][cam_idx - 1]).convert('RGB'))
-        # Similar operation in model_worker.py
-        image_tensor = process_images(images, self.image_processor, self.model.config)
-        if type(image_tensor) is list:
-            image_tensor = [image.to(self.model.device, dtype=torch.float16) for image in image_tensor]
+            images = []
+            for cam_idx in self.config['CAMERAS']:
+                images.append(Image.open(elem['image_paths'][cam_idx - 1]).convert('RGB'))
+            # Similar operation in model_worker.py
+            image_tensor = process_images(images, self.image_processor, self.model.config)
+            if type(image_tensor) is list:
+                image_tensor = [image.to(self.model.device, dtype=torch.float16) for image in image_tensor]
+            else:
+                image_tensor = image_tensor.to(self.model.device, dtype=torch.float16)
+            all_images.append(image_tensor)
+
+            # TODO this would need adapting if the prompt changes
+            inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
+            # first message
+            if self.model.config.mm_use_im_start_end:
+                inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
+            else:
+                inp = DEFAULT_IMAGE_TOKEN + '\n' + inp
+            if 'temporality' in self.config and self.config['temporality'] == 'GT':
+                take_idx, timepoint_idx, _ = elem['scan_id'].split('_')
+                take_idx = int(take_idx)
+                timepoint_idx = int(timepoint_idx)
+                take_timepoint = f'{take_idx}_{timepoint_idx}'
+                memory_str = self.take_timepoint_to_memory_str[take_timepoint]
+                # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
+                inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\n<memory_start>: {memory_str}<memory_end>.\n')
+            conv.append_message(conv.roles[0], inp)
+
+            conv.append_message(conv.roles[1], None)
+            prompt = conv.get_prompt()
+            all_prompts.append(prompt)
+
+        if batchsize == 1:
+            input_ids = tokenizer_image_token(all_prompts[0], self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).to(self.model.device)
+            image_tensor = all_images[0]
+
         else:
-            image_tensor = image_tensor.to(self.model.device, dtype=torch.float16)
+            input_ids = [tokenizer_image_token(prompt, self.tokenizer, return_tensors='pt') for prompt in all_prompts]
+            # merge with left padding
+            inverted_input_ids = [torch.flip(input_id, dims=[0]) for input_id in input_ids]
+            input_ids = torch.nn.utils.rnn.pad_sequence(inverted_input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+            # invert back
+            input_ids = torch.flip(input_ids, dims=[1]).to(self.model.device)
+            image_tensor = torch.cat(all_images)
 
-        # TODO this would need adapting if the prompt changes
-        inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
-        # first message
-        if self.model.config.mm_use_im_start_end:
-            inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
-        else:
-            inp = DEFAULT_IMAGE_TOKEN + '\n' + inp
-        if 'temporality' in self.config and self.config['temporality'] == 'GT':
-            take_idx, timepoint_idx, _ = batch['scan_id'].split('_')
-            take_idx = int(take_idx)
-            timepoint_idx = int(timepoint_idx)
-            take_timepoint = f'{take_idx}_{timepoint_idx}'
-            memory_str = self.take_timepoint_to_memory_str[take_timepoint]
-            # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')  # TODO adapt this to the new prompt
-            inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\n<memory_start>: {memory_str}<memory_end>.\n')
-        conv.append_message(conv.roles[0], inp)
-
-        conv.append_message(conv.roles[1], None)
-        prompt = conv.get_prompt()
-
-        input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).to(self.model.device)
         stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
         stopping_criteria = KeywordsStoppingCriteria([stop_str], self.tokenizer, input_ids)
 
@@ -116,9 +135,10 @@ class OracleWrapper:
                 max_new_tokens=300,
                 stopping_criteria=[stopping_criteria]
             )
-
-        outputs = self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()
-        conv.messages[-1][-1] = outputs
+        if batchsize == 1:
+            outputs = [self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()]
+        else:
+            outputs = self.tokenizer.batch_decode(output_ids[:,input_ids.shape[1]:].tolist(), skip_special_tokens=True)
         return outputs
 
     def reset_metrics(self, split=None):
@@ -229,77 +249,78 @@ class OracleWrapper:
                 if limit_counter <= 0:
                     break
                 limit_counter -= 1
-            output = self.forward(batch)
-            triplet_str = output.split(';')
-            triplets = []
-            human_roles = set()  # Need to be mapped for this evaluation
-            for triplet in triplet_str:
-                triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
-                # sometimes something like 591: circulator... remains from with memory training, remove this part
-                triplet = triplet.split(': ')[-1].strip()
-                if triplet == '':
-                    continue
-                triplet = triplet.split(',')
-                triplet = [elem.strip() for elem in triplet]
-                if len(triplet) != 3:
-                    continue
-                sub, obj, pred = triplet
-                if sub in reversed_role_synonyms:
-                    sub = reversed_role_synonyms[sub]
-                if obj in reversed_role_synonyms:
-                    obj = reversed_role_synonyms[obj]
-                if sub in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:  # TODO should patient be here?
-                    human_roles.add(sub)
-                if obj in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:
-                    human_roles.add(obj)
-                triplets.append((sub, pred, obj))
-            # these have to be mapped. First to human names, also the predicates
-            human_roles_to_indices = {human_role: f'human_{idx}' for idx, human_role in enumerate(sorted(human_roles))}
-            rel_preds = []
-            for (sub, pred, obj) in triplets:
-                try:
-                    sub = map_scene_graph_name_to_vocab_idx(human_roles_to_indices.get(sub, sub).replace(' ', '_'))
-                    obj = map_scene_graph_name_to_vocab_idx(human_roles_to_indices.get(obj, obj).replace(' ', '_'))
-                    pred = map_scene_graph_name_to_vocab_idx(pred)
-                    rel_preds.append((sub, pred, obj))
-                except Exception as e:
-                    print(e)
-                    continue
-            rel_labels = torch.tensor(batch['relations_tokenized'])
-            human_idx_map = self.compute_optimal_human_indices(rel_preds, rel_labels)
-            rel_preds = [(human_idx_map.get(pred_sub, pred_sub), pred_rel, human_idx_map.get(pred_obj, pred_obj)) for pred_sub, pred_rel, pred_obj in
-                         rel_preds]  # map
-            human_readable_pred = [(map_vocab_idx_to_scene_graph_name(sub), map_vocab_idx_to_scene_graph_name(pred), map_vocab_idx_to_scene_graph_name(obj))
-                                   for sub, pred, obj in rel_preds]
-            human_readable_gt = [(map_vocab_idx_to_scene_graph_name(sub), map_vocab_idx_to_scene_graph_name(pred), map_vocab_idx_to_scene_graph_name(obj))
-                                 for sub, pred, obj in rel_labels.tolist()]
-
-            if len(rel_labels) == 0:
-                all_gt_objects = []
-            else:
-                all_gt_objects = sorted(set(rel_labels[:, [0, 2]].flatten().tolist()))
-            # Search for all possible relationships between objects, those that don't have any should be labeled 'none', otherwise the correct relation is asked for
-
-            for gt_obj1 in all_gt_objects:
-                for gt_obj2 in all_gt_objects:
-                    if gt_obj1 == gt_obj2:
+            outputs = self.forward(batch)
+            for idx, output in enumerate(outputs):
+                triplet_str = output.split(';')
+                triplets = []
+                human_roles = set()  # Need to be mapped for this evaluation
+                for triplet in triplet_str:
+                    triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
+                    # sometimes something like 591: circulator... remains from with memory training, remove this part
+                    triplet = triplet.split(': ')[-1].strip()
+                    if triplet == '':
                         continue
-                    for gt_sub, gt_rel, gt_obj in rel_labels:
-                        if gt_sub == gt_obj1 and gt_obj == gt_obj2:
-                            take_rel_gts[batch['take_idx']].append(self.relation_names_lower_case.index(map_vocab_idx_to_scene_graph_name(gt_rel.item())))
-                            break
-                    else:
-                        take_rel_gts[batch['take_idx']].append(self.relation_names_lower_case.index('none'))
-                    for pred_sub, pred_rel, pred_obj in rel_preds:
-                        if pred_sub == gt_obj1 and pred_obj == gt_obj2:
-                            try:
-                                pred_rel_id = self.relation_names_lower_case.index(map_vocab_idx_to_scene_graph_name(pred_rel))
-                            except Exception as e:  # if a   none sense relation was predicted ignore
-                                pred_rel_id = self.relation_names_lower_case.index('none')
-                            take_rel_preds[batch['take_idx']].append(pred_rel_id)
-                            break
-                    else:
-                        take_rel_preds[batch['take_idx']].append(self.relation_names_lower_case.index('none'))
+                    triplet = triplet.split(',')
+                    triplet = [elem.strip() for elem in triplet]
+                    if len(triplet) != 3:
+                        continue
+                    sub, obj, pred = triplet
+                    if sub in reversed_role_synonyms:
+                        sub = reversed_role_synonyms[sub]
+                    if obj in reversed_role_synonyms:
+                        obj = reversed_role_synonyms[obj]
+                    if sub in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:  # TODO should patient be here?
+                        human_roles.add(sub)
+                    if obj in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:
+                        human_roles.add(obj)
+                    triplets.append((sub, pred, obj))
+                # these have to be mapped. First to human names, also the predicates
+                human_roles_to_indices = {human_role: f'human_{idx}' for idx, human_role in enumerate(sorted(human_roles))}
+                rel_preds = []
+                for (sub, pred, obj) in triplets:
+                    try:
+                        sub = map_scene_graph_name_to_vocab_idx(human_roles_to_indices.get(sub, sub).replace(' ', '_'))
+                        obj = map_scene_graph_name_to_vocab_idx(human_roles_to_indices.get(obj, obj).replace(' ', '_'))
+                        pred = map_scene_graph_name_to_vocab_idx(pred)
+                        rel_preds.append((sub, pred, obj))
+                    except Exception as e:
+                        print(e)
+                        continue
+                rel_labels = torch.tensor(batch[idx]['relations_tokenized'])
+                human_idx_map = self.compute_optimal_human_indices(rel_preds, rel_labels)
+                rel_preds = [(human_idx_map.get(pred_sub, pred_sub), pred_rel, human_idx_map.get(pred_obj, pred_obj)) for pred_sub, pred_rel, pred_obj in
+                             rel_preds]  # map
+                human_readable_pred = [(map_vocab_idx_to_scene_graph_name(sub), map_vocab_idx_to_scene_graph_name(pred), map_vocab_idx_to_scene_graph_name(obj))
+                                       for sub, pred, obj in rel_preds]
+                human_readable_gt = [(map_vocab_idx_to_scene_graph_name(sub), map_vocab_idx_to_scene_graph_name(pred), map_vocab_idx_to_scene_graph_name(obj))
+                                     for sub, pred, obj in rel_labels.tolist()]
+
+                if len(rel_labels) == 0:
+                    all_gt_objects = []
+                else:
+                    all_gt_objects = sorted(set(rel_labels[:, [0, 2]].flatten().tolist()))
+                # Search for all possible relationships between objects, those that don't have any should be labeled 'none', otherwise the correct relation is asked for
+
+                for gt_obj1 in all_gt_objects:
+                    for gt_obj2 in all_gt_objects:
+                        if gt_obj1 == gt_obj2:
+                            continue
+                        for gt_sub, gt_rel, gt_obj in rel_labels:
+                            if gt_sub == gt_obj1 and gt_obj == gt_obj2:
+                                take_rel_gts[batch[idx]['take_idx']].append(self.relation_names_lower_case.index(map_vocab_idx_to_scene_graph_name(gt_rel.item())))
+                                break
+                        else:
+                            take_rel_gts[batch[idx]['take_idx']].append(self.relation_names_lower_case.index('none'))
+                        for pred_sub, pred_rel, pred_obj in rel_preds:
+                            if pred_sub == gt_obj1 and pred_obj == gt_obj2:
+                                try:
+                                    pred_rel_id = self.relation_names_lower_case.index(map_vocab_idx_to_scene_graph_name(pred_rel))
+                                except Exception as e:  # if a   none sense relation was predicted ignore
+                                    pred_rel_id = self.relation_names_lower_case.index('none')
+                                take_rel_preds[batch[idx]['take_idx']].append(pred_rel_id)
+                                break
+                        else:
+                            take_rel_preds[batch[idx]['take_idx']].append(self.relation_names_lower_case.index('none'))
 
         self.val_take_rel_preds, self.val_take_rel_gts = take_rel_preds, take_rel_gts
         self.evaluate_predictions(None, 'val', logging_information=logging_information)
@@ -331,7 +352,8 @@ class OracleWrapper:
             for rel_name in self.relationNames:
                 for score_type in ['precision', 'recall', 'f1-score']:
                     # self.log(f'{rel_name}/{take_idx}_{score_type[:2].upper()}', cls_report[rel_name][score_type], rank_zero_only=True)
-                    logging_information['logger'].log_metrics({f'{rel_name}/{take_idx}_{score_type[:2].upper()}': cls_report[rel_name][score_type]}, step=logging_information['checkpoint_id'])
+                    if logging_information is not None:
+                        logging_information['logger'].log_metrics({f'{rel_name}/{take_idx}_{score_type[:2].upper()}': cls_report[rel_name][score_type]}, step=logging_information['checkpoint_id'])
 
             cls_report = classification_report(rel_gts, rel_preds, labels=list(range(len(self.relationNames))),
                                                target_names=self.relationNames)
