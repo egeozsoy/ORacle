@@ -59,7 +59,7 @@ def main():
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
         eval_dataset = ORDataset(config, 'val')
         # eval_dataset = ORDataset(config, 'train')
-        eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
+        eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
         model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,
@@ -79,11 +79,12 @@ def main():
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
         eval_dataset = ORDataset(config, 'val')
         eval_dataset_for_train = ORDataset(config, 'train')
-        for checkpoint_idx, checkpoint in enumerate(sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))):
-            if checkpoint_idx % eval_every_n_checkpoints != 0:
+        checkpoints = sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))
+        for checkpoint_idx, checkpoint in enumerate(checkpoints):
+            if checkpoint_idx % eval_every_n_checkpoints != 0 and checkpoint_idx != len(checkpoints) - 1:
                 print(f'Skipping checkpoint: {checkpoint}')
                 continue
-            if checkpoint_idx == 0:
+            if checkpoint_idx == 0 and 'continue' not in model_name:
                 print(f'Skipping checkpoint: {checkpoint}')
                 continue
             checkpoint_id = int(checkpoint.name.split('-')[-1])
@@ -91,15 +92,15 @@ def main():
                 print(f'Checkpoint {checkpoint_id} for model {model_name} already evaluated. Skipping.')
                 continue
             print(f'Evaluating checkpoint: {checkpoint}...')
-            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                       collate_fn=eval_dataset.collate_fn)
-            eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                      collate_fn=eval_dataset.collate_fn)
             model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                                   weights_obj=train_dataset.w_cls_obj,
                                   weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
                                   model_path=str(checkpoint))
-            model.validate(train_loader, limit_val_batches=1000, logging_information={'split': 'train', "logger": logger, "checkpoint_id": checkpoint_id})
+            model.validate(train_loader, limit_val_batches=125, logging_information={'split': 'train', "logger": logger, "checkpoint_id": checkpoint_id})
             model.validate(eval_loader, logging_information={'split': 'val', "logger": logger, "checkpoint_id": checkpoint_id})
             update_checkpoint_data(evaluated_file, model_name, checkpoint_id, logger.experiment.id)
 

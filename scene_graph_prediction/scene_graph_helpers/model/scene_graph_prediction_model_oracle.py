@@ -38,8 +38,6 @@ class OracleWrapper:
         self.val_take_rel_preds = defaultdict(list)
         self.val_take_rel_gts = defaultdict(list)
         self.reset_metrics()
-        # Model
-        disable_torch_init()
 
         self.model_name = get_model_name_from_path(model_path)
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
