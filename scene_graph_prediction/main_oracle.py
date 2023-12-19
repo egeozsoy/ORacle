@@ -1,4 +1,5 @@
 import os
+
 os.environ["WANDB_DIR"] = os.path.abspath("wandb")
 os.environ["TMPDIR"] = os.path.abspath("wandb")
 
@@ -73,12 +74,13 @@ def main():
         checkpoint_data = load_checkpoint_data(evaluated_file)
         model_path = Path(args.model_path)
         model_name = model_path.name
-        eval_every_n_checkpoints = 5
+        eval_every_n_checkpoints = 4
         wandb_run_id = checkpoint_data.get(model_name, {}).get("wandb_run_id", None)
         logger = pl.loggers.WandbLogger(project='oracle_evals', name=model_name, save_dir='logs', offline=False, id=wandb_run_id)
         train_dataset = ORDataset(config, 'train', shuffle_objs=True)
         eval_dataset = ORDataset(config, 'val')
         eval_dataset_for_train = ORDataset(config, 'train')
+        # always eval last checkpoint
         checkpoints = sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))
         for checkpoint_idx, checkpoint in enumerate(checkpoints):
             if checkpoint_idx % eval_every_n_checkpoints != 0 and checkpoint_idx != len(checkpoints) - 1:
@@ -92,7 +94,7 @@ def main():
                 print(f'Checkpoint {checkpoint_id} for model {model_name} already evaluated. Skipping.')
                 continue
             print(f'Evaluating checkpoint: {checkpoint}...')
-            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                       collate_fn=eval_dataset.collate_fn)
             eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                      collate_fn=eval_dataset.collate_fn)

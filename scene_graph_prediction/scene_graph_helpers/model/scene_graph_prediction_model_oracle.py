@@ -44,11 +44,19 @@ class OracleWrapper:
         self.model.config.mv_type = self.mconfig['mv_type']
         self.model.config.tokenizer_padding_side = "left"
         if 'temporality' in config and config['temporality'] == 'GT':
-            print('Loaidng temporality GT')
+            print('Loading temporality GT')
             self.take_timepoint_to_memory_str = {}
-            with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str.json') as f:
+            # with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str.json') as f: # TODO adapt this
+            #     self.take_timepoint_to_memory_str = json.load(f)
+            # with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str.json') as f:
+            #     self.take_timepoint_to_memory_str.update(json.load(f))
+            # with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str_predonly.json') as f:  # TODO adapt this
+            #     self.take_timepoint_to_memory_str = json.load(f)
+            # with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str_predonly.json') as f:
+            #     self.take_timepoint_to_memory_str.update(json.load(f))
+            with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str_relative.json') as f:  # TODO adapt this
                 self.take_timepoint_to_memory_str = json.load(f)
-            with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str.json') as f:
+            with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str_relative.json') as f:
                 self.take_timepoint_to_memory_str.update(json.load(f))
 
     def forward(self, batch):
@@ -92,7 +100,8 @@ class OracleWrapper:
                 timepoint_idx = int(timepoint_idx)
                 take_timepoint = f'{take_idx}_{timepoint_idx}'
                 memory_str = self.take_timepoint_to_memory_str[take_timepoint]
-                inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
+                # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
+                inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\n<memory_start>: {memory_str}<memory_end>.\n')
             conv.append_message(conv.roles[0], inp)
 
             conv.append_message(conv.roles[1], None)
@@ -128,7 +137,6 @@ class OracleWrapper:
             outputs = [self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()]
         else:
             outputs = self.tokenizer.batch_decode(output_ids[:,input_ids.shape[1]:].tolist(), skip_special_tokens=True)
-        #conv.messages[-1][-1] = outputs
         return outputs
 
     def reset_metrics(self, split=None):

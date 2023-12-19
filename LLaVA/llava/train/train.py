@@ -689,29 +689,29 @@ class TrivialAugmentWide(torch.nn.Module):
         """
 
     def __init__(self, num_magnitude_bins: int = 31, interpolation: InterpolationMode = InterpolationMode.NEAREST,
-                 fill: Optional[List[float]] = None) -> None:
+                 fill: Optional[List[float]] = None, strength: float = 1.0) -> None:
         super().__init__()
         self.num_magnitude_bins = num_magnitude_bins
         self.interpolation = interpolation
         self.fill = fill
+        self.strength = max(0.0, min(strength, 1.0))  # Ensuring strength is within [0, 1]
 
     def _augmentation_space(self, num_bins: int) -> Dict[str, Tuple[Tensor, bool]]:
+        scale_factor = self.strength
         return {
-            # op_name: (magnitudes, signed)
             "Identity": (torch.tensor(0.0), False),
-            "ShearX": (torch.linspace(0.0, 0.99, num_bins), True),
-            "ShearY": (torch.linspace(0.0, 0.99, num_bins), True),
-            "TranslateX": (torch.linspace(0.0, 32.0, num_bins), True),
-            "TranslateY": (torch.linspace(0.0, 32.0, num_bins), True),
-            "Rotate": (torch.linspace(0.0, 135.0, num_bins), True),
-            "Brightness": (torch.linspace(0.0, 0.99, num_bins), True),
-            "Color": (torch.linspace(0.0, 0.99, num_bins), True),
-            "Contrast": (torch.linspace(0.0, 0.99, num_bins), True),
-            "Sharpness": (torch.linspace(0.0, 0.99, num_bins), True),
+            "ShearX": (torch.linspace(0.0, 0.99 * scale_factor, num_bins), True),
+            "ShearY": (torch.linspace(0.0, 0.99 * scale_factor, num_bins), True),
+            "TranslateX": (torch.linspace(0.0, 32.0 * scale_factor, num_bins), True),
+            "TranslateY": (torch.linspace(0.0, 32.0 * scale_factor, num_bins), True),
+            "Rotate": (torch.linspace(0.0, 135.0 * scale_factor, num_bins), True),
+            "Brightness": (torch.linspace(0.0, 0.99 * scale_factor, num_bins), True),
+            "Color": (torch.linspace(0.0, 0.99 * scale_factor, num_bins), True),
+            "Contrast": (torch.linspace(0.0, 0.99 * scale_factor, num_bins), True),
+            "Sharpness": (torch.linspace(0.0, 0.99 * scale_factor, num_bins), True),
             "Posterize": (8 - (torch.arange(num_bins) / ((num_bins - 1) / 6)).round().int(), False),
             "Solarize": (torch.linspace(256.0, 0.0, num_bins), False),
             "AutoContrast": (torch.tensor(0.0), False),
-            "Equalize": (torch.tensor(0.0), False),
         }
 
     def forward(self, img: Tensor) -> Tensor:
@@ -761,7 +761,7 @@ class LazySupervisedDataset(Dataset):
         self.list_data_dict = list_data_dict
         self.data_args = data_args
         if self.data_args.do_augment:
-            self.augment = TrivialAugmentWide()
+            self.augment = TrivialAugmentWide(strength=1.0)
         else:
             self.augment = None
 
@@ -819,7 +819,7 @@ class LazySupervisedDataset(Dataset):
             else:
                 image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
                 if self.augment is not None:
-                    image = self.augment(image)  # TODO this is a lot
+                    image = self.augment(image)
                 if self.data_args.image_aspect_ratio == 'pad':
                     def expand2square(pil_img, background_color):
                         width, height = pil_img.size
