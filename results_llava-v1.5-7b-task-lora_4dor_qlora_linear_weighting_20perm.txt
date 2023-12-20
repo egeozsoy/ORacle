@@ -172,3 +172,55 @@ val Results:
     accuracy                           0.97     57102
    macro avg       0.89      0.78      0.82     57102
 weighted avg       0.97      0.97      0.97     57102
+
+
+25 epoch, temporal still frozen
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.79      0.58      0.67       212
+   Cementing       0.76      0.95      0.84        20
+    Cleaning       0.85      0.94      0.89        99
+     CloseTo       0.99      0.85      0.91     17118
+     Cutting       0.96      0.98      0.97        46
+    Drilling       0.86      0.96      0.91        25
+   Hammering       0.76      0.96      0.85        54
+     Holding       0.94      0.67      0.79       901
+     LyingOn       1.00      0.87      0.93      1161
+   Operating       0.91      0.56      0.69       104
+   Preparing       0.81      0.72      0.76       379
+      Sawing       0.83      0.97      0.90        40
+    Suturing       0.71      1.00      0.83        20
+    Touching       0.77      0.79      0.78       577
+        none       0.92      0.99      0.96     36346
+
+    accuracy                           0.94     57102
+   macro avg       0.86      0.85      0.85     57102
+weighted avg       0.94      0.94      0.94     57102
+
+
+20 epoch, non temporal, 12 unfreeze. !!!!
+val Results:
+
+              precision    recall  f1-score   support
+
+   Assisting       0.84      0.64      0.73       212
+   Cementing       0.73      0.95      0.83        20
+    Cleaning       0.77      0.86      0.81        99
+     CloseTo       0.98      0.94      0.96     17118
+     Cutting       0.84      0.91      0.87        46
+    Drilling       0.86      1.00      0.93        25
+   Hammering       0.81      0.85      0.83        54
+     Holding       0.92      0.77      0.84       901
+     LyingOn       1.00      0.95      0.98      1161
+   Operating       0.91      0.92      0.91       104
+   Preparing       0.72      0.91      0.80       379
+      Sawing       0.94      0.80      0.86        40
+    Suturing       0.74      0.70      0.72        20
+    Touching       0.75      0.80      0.78       577
+        none       0.97      0.99      0.98     36346
+
+    accuracy                           0.97     57102
+   macro avg       0.85      0.87      0.86     57102
+weighted avg       0.97      0.97      0.97     57102

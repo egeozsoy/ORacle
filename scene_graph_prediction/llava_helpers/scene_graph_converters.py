@@ -8,8 +8,7 @@ from tqdm import tqdm
 
 from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import reversed_role_synonyms, reversed_synonyms
 
-EOI_ORDER = ['patient', 'head surgeon', 'assistant surgeon', 'circulator', 'anaesthetist']
-IRRELEVANT_PREDS = ['closeto', 'holding', 'closeTo']
+IRRELEVANT_PREDS = ['closeto', 'closeTo']
 PRED_COUNTER = Counter()
 
 
@@ -20,7 +19,7 @@ def collapse_sgs(sgs):
     '''
     sub_obj_to_pred = {}  # key: (sub, obj), value: pred
     for timepoint_idx, (sub, pred, obj) in sgs:
-        if pred.startswith('stopped '):
+        if pred.startswith('not '):
             if (sub, obj) in sub_obj_to_pred:
                 del sub_obj_to_pred[(sub, obj)]
         else:
@@ -56,7 +55,7 @@ def find_related_entities(scene_graph, entity_of_interest, multi_hop_n):
     return _find_related(entity_of_interest, 0, set())
 
 
-def llava_sg_to_surgery_sg(llava_sgs, entity_of_interest):
+def llava_sg_to_surgery_sg(llava_sgs, entity_of_interest=None):
     '''
     Modifies the original function to only include changes that concern the specified entity.
     entity_of_interest: The entity to focus on (e.g., 'head surgeon').
@@ -67,12 +66,13 @@ def llava_sg_to_surgery_sg(llava_sgs, entity_of_interest):
         sg = elem['scene_graph']
         timepoint = elem['timepoint_idx']
         prev_sg = collapse_sgs(surgery_sg_triplets)
-
-        related_entities = find_related_entities(sg, entity_of_interest, multi_hop_n=0)  # 0 only entity of interest, 1 also related entities, 2 also related entities of related entities, etc.
-
-        # Filter scene graph for changes involving the entity of interest
-        current_sg = {(sub, obj): pred for (sub, pred, obj) in sg if
-                      pred not in IRRELEVANT_PREDS and (sub == entity_of_interest or obj == entity_of_interest or sub in related_entities or obj in related_entities)}
+        if entity_of_interest is None:
+            current_sg = {(sub, obj): pred for (sub, pred, obj) in sg if pred not in IRRELEVANT_PREDS and sub != 'none' and obj != 'none'}
+        else:
+            related_entities = find_related_entities(sg, entity_of_interest, multi_hop_n=0)  # 0 only entity of interest, 1 also related entities, 2 also related entities of related entities, etc.
+            # Filter scene graph for changes involving the entity of interest
+            current_sg = {(sub, obj): pred for (sub, pred, obj) in sg if
+                          pred not in IRRELEVANT_PREDS and (sub == entity_of_interest or obj == entity_of_interest or sub in related_entities or obj in related_entities)}
         # Compare current_sg with previous (collapsed) sg. If there is a difference, add it to the modifications.
         additions = []
         removals = []
@@ -87,7 +87,7 @@ def llava_sg_to_surgery_sg(llava_sgs, entity_of_interest):
             PRED_COUNTER[pred] += 1
             modifications.append((timepoint, (sub, pred, obj)))
         for sub, pred, obj in removals:
-            modifications.append((timepoint, (sub, f'stopped {pred}', obj)))
+            modifications.append((timepoint, (sub, f'not {pred}', obj)))
         shuffle(modifications)
         surgery_sg_triplets.extend(modifications)
     return surgery_sg_triplets
@@ -98,7 +98,10 @@ def extract_take_int_from_image_path(image_path):
 
 
 def parse_llava_sg(llava_sg):
-    triplet_str = llava_sg.split(';')
+    if '<SG>' in llava_sg and '</SG>' in llava_sg and llava_sg.index('<SG>') < llava_sg.index('</SG>'):
+        triplet_str = llava_sg.split('<SG>')[1].split('</SG>')[0].strip().split(';')
+    else:
+        triplet_str = llava_sg.split(';')
     triplets = []
     for triplet in triplet_str:
         triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
@@ -113,14 +116,68 @@ def parse_llava_sg(llava_sg):
     return triplets
 
 
-def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint):
+def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='all'):
+    '''
+    Temporal style can be all, long, short, longshort
+    '''
     memory_str = ''
-    for timepoint, (sub, pred,
-                    obj) in surgery_sg_triplets:  # TODO actually intended was a different format. where we list per timepoint the changes. Then you would only have one T-N for each timepoint, then the scene graph.
-        rel_timepoint = current_timepoint - timepoint
-        # memory_str += f'{timepoint}: {sub},{obj},{pred}; '
-        # instead we use relative timepoint with T-minus notation
-        memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '
+    last_reltimepoint = -1
+    if TEMPORAL_STYLE == 'all':
+        for timepoint, (sub, pred, obj) in surgery_sg_triplets:
+            rel_timepoint = current_timepoint - timepoint
+            if rel_timepoint == last_reltimepoint:  # add without timepoint
+                memory_str += f'{sub},{obj},{pred}; '
+            else:
+                memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
+                last_reltimepoint = rel_timepoint
+    elif TEMPORAL_STYLE == 'short':
+        # Only include the most recent 5 changes, formatted as short term memory.
+        memory_str += 'Short: '
+        for timepoint, (sub, pred, obj) in surgery_sg_triplets[-5:]:
+            rel_timepoint = current_timepoint - timepoint
+            if rel_timepoint == last_reltimepoint:  # add without timepoint
+                memory_str += f'{sub},{obj},{pred}; '
+            else:
+                memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
+                last_reltimepoint = rel_timepoint
+    elif TEMPORAL_STYLE == 'long':
+        # Only include long term memory, formatted in the long term manner.
+        memory_str += 'Long: '
+        occurrenced_triplets = set()
+        for timepoint, (sub, pred, obj) in surgery_sg_triplets[:-5]:
+            # simplified representation: Only the first occurance of every action is logged. "not" actions are also skipped.
+            if (sub, obj, pred) not in occurrenced_triplets and not pred.startswith('not '):
+                occurrenced_triplets.add((sub, obj, pred))
+                rel_timepoint = current_timepoint - timepoint
+                if rel_timepoint == last_reltimepoint:  # add without timepoint
+                    memory_str += f'{sub},{obj},{pred}; '
+                else:
+                    memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
+                    last_reltimepoint = rel_timepoint
+
+    elif TEMPORAL_STYLE == 'longshort':
+        # include both short and long term memory, formatted in the a mix of the two styles.
+        memory_str += 'Long: '
+        occurrenced_triplets = set()
+        for timepoint, (sub, pred, obj) in surgery_sg_triplets[:-5]:
+            # simplified representation: Only the first occurance of every action is logged. "not" actions are also skipped.
+            if (sub, obj, pred) not in occurrenced_triplets and not pred.startswith('not '):
+                occurrenced_triplets.add((sub, obj, pred))
+                rel_timepoint = current_timepoint - timepoint
+                if rel_timepoint == last_reltimepoint:  # add without timepoint
+                    memory_str += f'{sub},{obj},{pred}; '
+                else:
+                    memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
+                    last_reltimepoint = rel_timepoint
+        memory_str += 'Short: '
+        for timepoint, (sub, pred, obj) in surgery_sg_triplets[-5:]:
+            # full representation: All actions are logged. "not" actions are also logged.
+            rel_timepoint = current_timepoint - timepoint
+            if rel_timepoint == last_reltimepoint:  # add without timepoint
+                memory_str += f'{sub},{obj},{pred}; '
+            else:
+                memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
+                last_reltimepoint = rel_timepoint
 
     if memory_str == '':
         return ''

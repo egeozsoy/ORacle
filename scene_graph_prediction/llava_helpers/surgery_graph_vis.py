@@ -33,7 +33,7 @@ def create_interactive_graph(data):
         curr_focus_pred = set()
         FOCUS_ENTITY_FOUND = False
         for _, (sub, pred, obj) in timepoint_sgs:
-            if sub == FOCUS_ENTITY or obj == FOCUS_ENTITY and not pred.startswith('stopped '):
+            if sub == FOCUS_ENTITY or obj == FOCUS_ENTITY and not pred.startswith('not '):
                 FOCUS_ENTITY_FOUND = True
                 curr_focus_pred.add((sub, obj, pred))
         if curr_focus_pred == prev_focus_pred:
