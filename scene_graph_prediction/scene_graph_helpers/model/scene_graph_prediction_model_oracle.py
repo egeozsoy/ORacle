@@ -46,17 +46,9 @@ class OracleWrapper:
         if 'temporality' in config and config['temporality'] == 'GT':
             print('Loading temporality GT')
             self.take_timepoint_to_memory_str = {}
-            # with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str.json') as f: # TODO adapt this
-            #     self.take_timepoint_to_memory_str = json.load(f)
-            # with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str.json') as f:
-            #     self.take_timepoint_to_memory_str.update(json.load(f))
-            # with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str_predonly.json') as f:  # TODO adapt this
-            #     self.take_timepoint_to_memory_str = json.load(f)
-            # with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str_predonly.json') as f:
-            #     self.take_timepoint_to_memory_str.update(json.load(f))
-            with open('data/llava_samples/train_25perm_take_timepoint_to_memory_str_relative.json') as f:  # TODO adapt this
+            with open('data/llava_samples/train_50perm_Truetemp_doublemem_Truetempaug_longshort_doublesg_take_timepoint_to_memory_str.json') as f:  # TODO adapt this
                 self.take_timepoint_to_memory_str = json.load(f)
-            with open('data/llava_samples/val_25perm_take_timepoint_to_memory_str_relative.json') as f:
+            with open('data/llava_samples/val_50perm_Truetemp_doublemem_Truetempaug_longshort_doublesg_take_timepoint_to_memory_str.json') as f:
                 self.take_timepoint_to_memory_str.update(json.load(f))
 
     def forward(self, batch):
@@ -88,7 +80,9 @@ class OracleWrapper:
             all_images.append(image_tensor)
 
             # TODO this would need adapting if the prompt changes
-            inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
+            # inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
+            # inp = "Describe this image at timepoint T using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
+            inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
             # first message
             if self.model.config.mm_use_im_start_end:
                 inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
@@ -101,6 +95,9 @@ class OracleWrapper:
                 take_timepoint = f'{take_idx}_{timepoint_idx}'
                 memory_str = self.take_timepoint_to_memory_str[take_timepoint]
                 # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
+                if len(memory_str) > 5000:
+                    print(f'Warning: memory string is too long ({len(memory_str)} chars)')
+                    memory_str = '...' + memory_str[-5000:]
                 inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\n<memory_start>: {memory_str}<memory_end>.\n')
             conv.append_message(conv.roles[0], inp)
 
@@ -125,6 +122,7 @@ class OracleWrapper:
         stopping_criteria = KeywordsStoppingCriteria([stop_str], self.tokenizer, input_ids)
 
         with torch.inference_mode():
+            print(f'Length of input_ids: {input_ids.shape[1]}')
             output_ids = self.model.generate(
                 input_ids,
                 images=image_tensor,
@@ -249,13 +247,14 @@ class OracleWrapper:
                 limit_counter -= 1
             outputs = self.forward(batch)
             for idx, output in enumerate(outputs):
-                triplet_str = output.split(';')
+                if '<SG>' in output and '</SG>' in output and output.index('<SG>') < output.index('</SG>'):
+                    triplet_str = output.split('<SG>')[1].split('</SG>')[0].strip().split(';')
+                else:
+                    triplet_str = output.split(';')
                 triplets = []
                 human_roles = set()  # Need to be mapped for this evaluation
                 for triplet in triplet_str:
                     triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
-                    # sometimes something like 591: circulator... remains from with memory training, remove this part
-                    triplet = triplet.split(': ')[-1].strip()
                     if triplet == '':
                         continue
                     triplet = triplet.split(',')

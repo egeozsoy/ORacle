@@ -82,19 +82,24 @@ def main():
         eval_dataset_for_train = ORDataset(config, 'train')
         # always eval last checkpoint
         checkpoints = sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))
-        for checkpoint_idx, checkpoint in enumerate(checkpoints):
+        print(checkpoints)
+        checkpoint_idx = 0
+        while checkpoint_idx < len(checkpoints):
+            checkpoint = checkpoints[checkpoint_idx]
             if checkpoint_idx % eval_every_n_checkpoints != 0 and checkpoint_idx != len(checkpoints) - 1:
                 print(f'Skipping checkpoint: {checkpoint}')
+                checkpoint_idx += 1
                 continue
             if checkpoint_idx == 0 and 'continue' not in model_name:
                 print(f'Skipping checkpoint: {checkpoint}')
                 continue
             checkpoint_id = int(checkpoint.name.split('-')[-1])
-            if model_name in checkpoint_data and str(checkpoint_id) in checkpoint_data[model_name]["checkpoints"]:
+            if model_name in checkpoint_data and checkpoint_id in checkpoint_data[model_name]["checkpoints"]:
                 print(f'Checkpoint {checkpoint_id} for model {model_name} already evaluated. Skipping.')
+                checkpoint_idx += 1
                 continue
             print(f'Evaluating checkpoint: {checkpoint}...')
-            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
+            train_loader = DataLoader(eval_dataset_for_train, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                       collate_fn=eval_dataset.collate_fn)
             eval_loader = DataLoader(eval_dataset, batch_size=8, shuffle=True, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                      collate_fn=eval_dataset.collate_fn)
@@ -105,6 +110,8 @@ def main():
             model.validate(train_loader, limit_val_batches=125, logging_information={'split': 'train', "logger": logger, "checkpoint_id": checkpoint_id})
             model.validate(eval_loader, logging_information={'split': 'val', "logger": logger, "checkpoint_id": checkpoint_id})
             update_checkpoint_data(evaluated_file, model_name, checkpoint_id, logger.experiment.id)
+            checkpoint_idx += 1
+            checkpoints = sorted(list(model_path.glob('checkpoint-*')), key=lambda x: int(str(x).split('-')[-1]))  # update checkpoints in case new ones were added
 
     elif mode == 'infer':
         raise NotImplementedError('TODO')
@@ -138,12 +145,9 @@ def main():
 
 
 if __name__ == '__main__':
-    # TODO use multiview. test concat, vs average vs max.
-    # TODO repeat log vs linear test
-    # TODO see if 50 epochs are really necessary. Maybe 20 is enough.
-    # TODO only changes. OR/OP scene graph. Used as memory.
-    # TODO image augmentations
-    # TODO log!!!
+    # TODO augmentation + 50 epochs
+    # TODO don't init pooler if not used.
+    # TODO decide grad accum or not
 
     # TODO only train with one take or a few
     # TODO temporality using surgery SG. needs adaptation in train and eval. Initial version uses GT, should be online at some point+

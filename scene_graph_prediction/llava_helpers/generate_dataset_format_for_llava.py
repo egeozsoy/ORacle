@@ -134,14 +134,15 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
 
 def main():
-    N_PERM = 25
+    N_PERM = 50
     ADD_TEMPORAL = True
     WITH_TEMPORAL_AUG = True
     MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
+    TEMPORAL_STYLE = 'longshort'  # can be longshort or all
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SPLIT = 'train'
     # TODO other stuff we want to integrate we can do here as well.
-    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{SG_INDICATOR}sg'
+    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg'
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -191,7 +192,8 @@ def main():
                 scene_graph = parse_llava_sg(take_scene_graph['conversations'][1]['value'])
                 take_scene_graphs_reformatted.append({'timepoint_idx': take_scene_graph['timepoint'], 'scene_graph': scene_graph})
 
-            surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient')
+            # surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient')
+            surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest=None)
             with open(f'data/llava_samples/surgery_sg_{take_int}.json', 'w') as f:
                 json.dump(surgery_sg_triplets, f)
             take_to_history[take_int] = surgery_sg_triplets
@@ -204,7 +206,7 @@ def main():
             surgery_sg_triplets = take_to_history[take_int]
             timepoint = llava_scene_graph['timepoint']
             surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint]
-            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint)
+            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE=TEMPORAL_STYLE)
             take_timepoint_to_memory_str[f'{take_int}_{timepoint}'] = memory_str
             input = llava_scene_graph['conversations'][0]['value']
 
@@ -213,11 +215,9 @@ def main():
                 if p < 0.5:
                     memory_str = None
                 elif p < 0.666:
-                    short_term_surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] > timepoint - 20]
-                    memory_str = surgery_sg_to_memory_str(short_term_surgery_sg_triplets, current_timepoint=timepoint)
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='short')
                 elif p < 0.833:
-                    long_term_surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] <= timepoint - 20]
-                    memory_str = surgery_sg_to_memory_str(long_term_surgery_sg_triplets, current_timepoint=timepoint)
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='long')
 
             if memory_str is not None:
                 if MEMORY_INDICATOR == 'single':
