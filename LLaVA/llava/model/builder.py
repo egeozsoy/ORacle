@@ -162,6 +162,17 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             vision_tower.load_state_dict(new_vision_tower_state_dict, strict=False)
             # weight difference sum([torch.norm(value-vision_tower.state_dict()[key].cpu())  for key,value in new_vision_tower_state_dict.items()])
 
+        image_pooler = model.get_image_pooler()
+        image_pooler.to(device=device, dtype=torch.float16)
+        if non_lora_trainables is not None and any(k.startswith('model.image_pooler.') for k in non_lora_trainables):
+            new_image_pooler_state_dict = {}
+            for k, v in non_lora_trainables.items():  # we need remapping, because state_dict from model is always like model.vision_tower. It should be vision_tower.
+                if 'model.image_pooler.' in k:
+                    new_k = k.replace('model.image_pooler.', '')
+                    new_image_pooler_state_dict[new_k] = v
+            print('Loading additional image pooler weights...')
+            image_pooler.load_state_dict(new_image_pooler_state_dict, strict=False)
+
     if hasattr(model.config, "max_sequence_length"):
         context_len = model.config.max_sequence_length
     else:
