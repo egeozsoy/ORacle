@@ -16,6 +16,7 @@
 import math
 import os
 import copy
+import random
 from dataclasses import dataclass, field
 import json
 import logging
@@ -73,6 +74,7 @@ class DataArguments:
     image_folder: Optional[str] = field(default=None)
     image_aspect_ratio: str = 'square'
     do_augment: bool = field(default=False)
+    do_img_order_augment: bool = field(default=False)
 
 
 @dataclass
@@ -760,6 +762,7 @@ class LazySupervisedDataset(Dataset):
         self.tokenizer = tokenizer
         self.list_data_dict = list_data_dict
         self.data_args = data_args
+        self.do_img_order_augment = self.data_args.do_img_order_augment
         if self.data_args.do_augment:
             self.augment = TrivialAugmentWide(strength=1.0)
         else:
@@ -792,6 +795,12 @@ class LazySupervisedDataset(Dataset):
         assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
         if 'image' in sources[0]:
             image_file = self.list_data_dict[i]['image']
+
+            if self.do_img_order_augment:
+                random.shuffle(image_file)
+                n_images = random.randint(1,len(image_file))
+                image_file = image_file[:n_images]
+
             image_folder = self.data_args.image_folder
             processor = self.data_args.image_processor
             if type(image_file) == list:
