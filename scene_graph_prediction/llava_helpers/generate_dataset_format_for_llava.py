@@ -141,8 +141,9 @@ def main():
     TEMPORAL_STYLE = 'longshort'  # can be longshort or all
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SPLIT = 'train'
+    views_to_use = (2,1)
     # TODO other stuff we want to integrate we can do here as well.
-    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg'
+    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg_{len(views_to_use)}view'
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -160,7 +161,7 @@ def main():
 
     dataset = ORDataset(config, SPLIT)
 
-    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR)
+    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR, views_to_use=views_to_use)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies

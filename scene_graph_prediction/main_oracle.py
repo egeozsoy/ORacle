@@ -91,6 +91,7 @@ def main():
                 checkpoint_idx += 1
                 continue
             if checkpoint_idx == 0 and 'continue' not in model_name:
+                checkpoint_idx += 1
                 print(f'Skipping checkpoint: {checkpoint}')
                 continue
             checkpoint_id = int(checkpoint.name.split('-')[-1])

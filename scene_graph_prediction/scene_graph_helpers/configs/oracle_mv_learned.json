@@ -7,7 +7,7 @@
   "NUM_WORKERS": 8,
   "USE_GT": false,
   "CAMERAS": [
-    1,2
+    2,1
   ],
   "IMAGE_INPUT": "full",
   "EDGE_BUILD_TYPE": "KNN",

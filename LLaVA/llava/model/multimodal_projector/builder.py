@@ -69,21 +69,15 @@ class ImageEmbeddingPooler(nn.Module):
         )
         self.bert = BertModel(config)
 
-    def forward(self, embeddings):
+    def forward(self, embeddings, attention_mask):
         # embeddings shape: (batch_size, num_images, embedding_dim)
         batch_size, num_tokens, _ = embeddings.shape
-        num_views = num_tokens // 576
-
         # Process embeddings through BERT without positional IDs
-        outputs = self.bert(inputs_embeds=embeddings)
+        outputs = self.bert(inputs_embeds=embeddings, attention_mask=attention_mask)
+        # identity option
+        outputs = outputs['last_hidden_state'].to(embeddings.dtype)[:, :576]
 
-        last_hidden_states = outputs['last_hidden_state'].to(embeddings.dtype)
-        # split mid dimension into num_views
-        last_hidden_states = last_hidden_states.view(batch_size, num_views, 576, self.embedding_dim)
-
-        pooled_output = torch.mean(last_hidden_states, dim=1)  # For mean pooling
-
-        return pooled_output
+        return outputs
 
 def build_image_pooler(config):
     return ImageEmbeddingPooler()
