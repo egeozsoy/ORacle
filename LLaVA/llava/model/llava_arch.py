@@ -177,7 +177,8 @@ class LlavaMetaForCausalLM(ABC):
             image_features, mask  = self.pad_embeddings(image_features)
             image_features = image_pooler(image_features, mask)
         else:
-            image_features = image_pooler(image_features)
+            mask = torch.ones((image_features.shape[0], image_features.shape[1]), dtype=torch.bool, device=image_features[0].device)
+            image_features = image_pooler(image_features, mask)
         image_features = self.get_model().mm_projector(image_features)
         return image_features
 
