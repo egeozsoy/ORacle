@@ -141,7 +141,7 @@ def main():
     TEMPORAL_STYLE = 'longshort'  # can be longshort or all
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SPLIT = 'train'
-    views_to_use = (2,1)
+    views_to_use = (2,1,3,5)
     # TODO other stuff we want to integrate we can do here as well.
     NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg_{len(views_to_use)}view'
     print(f'Creating samples for LLAVA dataset with name {NAME}')

@@ -18,7 +18,7 @@ from transformers.trainer import (
 )
 from typing import List, Optional
 
-with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_20perm.json') as f:
+with open('/home/guests/chantal_pellegrini/Oracle/data/llava_samples/train_token_freqs_7b_20perm.json') as f:
     token_frequencies = json.load(f)
 
 token_weights = {k: 1 / v for k, v in token_frequencies.items()}  # linear weighting
