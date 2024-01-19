@@ -1,6 +1,7 @@
 import random
 import warnings
 from collections import Counter, defaultdict
+from copy import deepcopy
 from random import shuffle
 import transformers
 from tqdm import tqdm
@@ -204,12 +205,12 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
             entity_symbol_to_descriptor = {}
             predicate_name_to_symbol = {}
             predicate_symbol_to_descriptor = {}
-            entity_symbols = ENTITY_SYMBOLS.copy()
-            predicate_symbols = PREDICATE_SYMBOLS.copy()
+            entity_symbols = deepcopy(ENTITY_SYMBOLS)
+            predicate_symbols = deepcopy(PREDICATE_SYMBOLS)
             shuffle(entity_symbols)
             shuffle(predicate_symbols)
-            entity_descriptors = ENTITY_DESCRIPTORS_TRAINING.copy()
-            predicate_descriptors = PREDICATE_DESCRIPTORS_TRAINING.copy()
+            entity_descriptors = deepcopy(ENTITY_DESCRIPTORS_TRAINING)
+            predicate_descriptors = deepcopy(PREDICATE_DESCRIPTORS_TRAINING)
             visual_attributes = {}
             textual_attributes = {}
             entities_to_delete = []
@@ -225,8 +226,8 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                 if isinstance(descriptors, list):
                     continue
                 elif isinstance(descriptors, dict):
-                    all_attributes = sorted(list(descriptors.items()))
                     visual_attributes[entity_name] = descriptors
+                    all_attributes = sorted(list(descriptors.items()))
                     n_attributes = random.randint(1, len(all_attributes))
                     picked_attributes = {key: value for key, value in random.sample(all_attributes, n_attributes)}
                     if FAKE_ATTRIBUTES:
@@ -244,8 +245,8 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                 if isinstance(descriptors, list):
                     continue
                 elif isinstance(descriptors, dict):
-                    all_attributes = sorted(list(descriptors.items()))
                     visual_attributes[predicate_name] = descriptors
+                    all_attributes = sorted(list(descriptors.items()))
                     n_attributes = random.randint(1, len(all_attributes))
                     picked_attributes = {key: value for key, value in random.sample(all_attributes, n_attributes)}
                     if FAKE_ATTRIBUTES:
@@ -397,8 +398,8 @@ def main():
         padding_side="right",
         use_fast=False,
     )
-
-    samples = generate_finetuning_samples(Path('synthetic_or_generation/synthetic_4D-OR'), SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
+    # TODO synthetic_4D-OR_fullremoved and synthetic_4D-OR_new2
+    samples = generate_finetuning_samples(Path('synthetic_or_generation/synthetic_4D-OR_new'), SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
                                           SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, COT_PROMPTING=COT_PROMPTING)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)

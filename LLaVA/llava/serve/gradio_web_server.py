@@ -137,9 +137,11 @@ def add_text(state, text, image, image_process_mode, request: gr.Request):
             return (state, state.to_gradio_chatbot(), moderation_msg, None) + (
                 no_change_btn,) * 5
 
-    text = text[:1536]  # Hard cut-off
+    # text = text[:1536]  # Hard cut-off
+    text = text[:2048]
     if image is not None:
-        text = text[:1200]  # Hard cut-off for images
+        # text = text[:1200]  # Hard cut-off for images
+        text = text[:2048]
         if '<image>' not in text:
             # text = '<Image><image></Image>' + text
             text = text + '\n<image>'

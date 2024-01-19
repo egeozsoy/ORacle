@@ -1,14 +1,8 @@
-import json
+import random
 import re
 from collections import Counter
-from pathlib import Path
 from random import shuffle
 
-from tqdm import tqdm
-
-from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import reversed_role_synonyms, reversed_synonyms
-
-IRRELEVANT_PREDS = ['closeto', 'closeTo']
 PRED_COUNTER = Counter()
 
 
@@ -55,7 +49,7 @@ def find_related_entities(scene_graph, entity_of_interest, multi_hop_n):
     return _find_related(entity_of_interest, 0, set())
 
 
-def llava_sg_to_surgery_sg(llava_sgs, entity_of_interest=None):
+def llava_sg_to_surgery_sg(llava_sgs, entity_of_interest=None, IRRELEVANT_PREDS=None):
     '''
     Modifies the original function to only include changes that concern the specified entity.
     entity_of_interest: The entity to focus on (e.g., 'head surgeon').
@@ -116,30 +110,47 @@ def parse_llava_sg(llava_sg):
     return triplets
 
 
-def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='all'):
+def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='all', COMPACT_TEMPORAL=False, INCLUDE_TIMEPOINTS=True, DROP_HISTORY=False):
     '''
     Temporal style can be all, long, short, longshort
     '''
+
+    def _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint):
+        rel_timepoint = current_timepoint - timepoint
+        if rel_timepoint == last_reltimepoint:  # add without timepoint
+            if COMPACT_TEMPORAL:
+                m_str = f'{pred}; '
+            else:
+                m_str = f'{sub},{obj},{pred}; '
+        else:
+            if COMPACT_TEMPORAL:
+                if INCLUDE_TIMEPOINTS:
+                    m_str = f'T-{rel_timepoint}: {pred}; '
+                else:
+                    m_str = f'{pred}; '
+            else:
+                if INCLUDE_TIMEPOINTS:
+                    m_str = f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
+                else:
+                    m_str = f'{sub},{obj},{pred}; '
+            last_reltimepoint = rel_timepoint
+        return m_str, last_reltimepoint
+
     memory_str = ''
     last_reltimepoint = -1
     if TEMPORAL_STYLE == 'all':
+        raise NotImplementedError
         for timepoint, (sub, pred, obj) in surgery_sg_triplets:
-            rel_timepoint = current_timepoint - timepoint
-            if rel_timepoint == last_reltimepoint:  # add without timepoint
-                memory_str += f'{sub},{obj},{pred}; '
-            else:
-                memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-                last_reltimepoint = rel_timepoint
+            m_str, last_reltimepoint = _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint)
+            memory_str += m_str
     elif TEMPORAL_STYLE == 'short':
         # Only include the most recent 5 changes, formatted as short term memory.
         memory_str += 'Short: '
         for timepoint, (sub, pred, obj) in surgery_sg_triplets[-5:]:
-            rel_timepoint = current_timepoint - timepoint
-            if rel_timepoint == last_reltimepoint:  # add without timepoint
-                memory_str += f'{sub},{obj},{pred}; '
-            else:
-                memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-                last_reltimepoint = rel_timepoint
+            m_str, last_reltimepoint = _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint)
+            if DROP_HISTORY is not False and random.random() < DROP_HISTORY:
+                continue
+            memory_str += m_str
     elif TEMPORAL_STYLE == 'long':
         # Only include long term memory, formatted in the long term manner.
         memory_str += 'Long: '
@@ -148,12 +159,10 @@ def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_ST
             # simplified representation: Only the first occurance of every action is logged. "not" actions are also skipped.
             if (sub, obj, pred) not in occurrenced_triplets and not pred.startswith('not '):
                 occurrenced_triplets.add((sub, obj, pred))
-                rel_timepoint = current_timepoint - timepoint
-                if rel_timepoint == last_reltimepoint:  # add without timepoint
-                    memory_str += f'{sub},{obj},{pred}; '
-                else:
-                    memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-                    last_reltimepoint = rel_timepoint
+                m_str, last_reltimepoint = _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint)
+                if DROP_HISTORY is not False and random.random() < DROP_HISTORY:
+                    continue
+                memory_str += m_str
 
     elif TEMPORAL_STYLE == 'longshort':
         # include both short and long term memory, formatted in the a mix of the two styles.
@@ -163,21 +172,17 @@ def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_ST
             # simplified representation: Only the first occurance of every action is logged. "not" actions are also skipped.
             if (sub, obj, pred) not in occurrenced_triplets and not pred.startswith('not '):
                 occurrenced_triplets.add((sub, obj, pred))
-                rel_timepoint = current_timepoint - timepoint
-                if rel_timepoint == last_reltimepoint:  # add without timepoint
-                    memory_str += f'{sub},{obj},{pred}; '
-                else:
-                    memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-                    last_reltimepoint = rel_timepoint
+                m_str, last_reltimepoint = _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint)
+                if DROP_HISTORY is not False and random.random() < DROP_HISTORY:
+                    continue
+                memory_str += m_str
         memory_str += 'Short: '
         for timepoint, (sub, pred, obj) in surgery_sg_triplets[-5:]:
             # full representation: All actions are logged. "not" actions are also logged.
-            rel_timepoint = current_timepoint - timepoint
-            if rel_timepoint == last_reltimepoint:  # add without timepoint
-                memory_str += f'{sub},{obj},{pred}; '
-            else:
-                memory_str += f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-                last_reltimepoint = rel_timepoint
+            m_str, last_reltimepoint = _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint)
+            if DROP_HISTORY is not False and random.random() < DROP_HISTORY:
+                continue
+            memory_str += m_str
 
     if memory_str == '':
         return ''

@@ -12,6 +12,7 @@
   "IMAGE_INPUT": "full",
   "EDGE_BUILD_TYPE": "KNN",
   "temporality": "GT",
+  "COMPACT_TEMPORAL": false,
   "WEIGHTING": true,
   "MODEL": {
     "N_LAYERS": 2,

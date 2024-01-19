@@ -166,7 +166,7 @@ def init_worker():
     images_dir = Path('synthetic_or_generation/images_sdxl')
     object_type_to_images = defaultdict(list)
 
-    export_path = Path('synthetic_or_generation/synthetic_4D-OR')
+    export_path = Path('synthetic_or_generation/synthetic_4D-OR_new2')
     export_path.mkdir(exist_ok=True, parents=True)
 
     # 1. First fetch the background images
@@ -219,7 +219,8 @@ def main_worker(d_idx):
         ref_take, ref_idx = ref_scene['idx'].split('_')
         ref_graph = graphs[ref_scene['idx']]
         roles = role_labels[ref_scene['idx']]
-        data = {'sg': ref_graph, 'descriptors': {}, 'replaced_pred': None, 'replaced_entity': None}
+        data = {'sg': ref_graph, 'descriptors': {}, 'replaced_pred': None, 'replaced_entity': None, 'paths': {}}
+        rgb = None
 
         if instrument_image:
             # locate the left or right hand of the surgeon. Place the instrument image there.
@@ -244,8 +245,10 @@ def main_worker(d_idx):
                 timestamp_to_pcd_and_frames_list = json.load(f)
             color_image_str = timestamp_to_pcd_and_frames_list[int(ref_idx)][1][f'color_{CAM_IDX}']
             rgb_path = color_image_path / f'camera0{CAM_IDX}_colorimage-{color_image_str}.jpg'
-            rgb = Image.open(str(rgb_path)).convert("RGBA")
+            if rgb is None:
+                rgb = Image.open(str(rgb_path)).convert("RGBA")
             # plot the instrument image on top of the rgb image
+            instrument_image_path = instrument_image.stem
             instrument_image = Image.open(instrument_image).convert('RGBA')
             # scale the object depending on the depth of the entity. Meaning the further away the entity is, the smaller the object should be.
             scale_factor = random.randint(200_000, 400_000)
@@ -264,6 +267,7 @@ def main_worker(d_idx):
             ref_graph = new_graph
 
             data['descriptors'][replacement_map[instrument_attrs['object_type']]['replace_pred_to']] = instrument_attrs
+            data['paths'][replacement_map[instrument_attrs['object_type']]['replace_pred_to']] = instrument_image_path
             data['replaced_pred'] = pred_to_replace
 
         if equipment_image:
@@ -278,7 +282,8 @@ def main_worker(d_idx):
                 timestamp_to_pcd_and_frames_list = json.load(f)
             color_image_str = timestamp_to_pcd_and_frames_list[int(ref_idx)][1][f'color_{CAM_IDX}']
             rgb_path = color_image_path / f'camera0{CAM_IDX}_colorimage-{color_image_str}.jpg'
-            rgb = Image.open(str(rgb_path)).convert("RGBA")
+            if rgb is None:
+                rgb = Image.open(str(rgb_path)).convert("RGBA")
             # 1) Clean where the current entity is. Use clean bg for this.
             entity_mask = Image.open(entity_crops_path / f'{CAM_IDX}/{entity_to_replace}/{ref_scene["idx"]}.png')
             # Mask cleanbg using entity mask
@@ -290,6 +295,7 @@ def main_worker(d_idx):
             # finish the cleaning by pasting clean_bg on top of rgb
             rgb.paste(clean_bg, (0, 0), clean_bg)
             # 2) Start adding the new equipment. But mask it again using entity mask to make sure it does not exceed the entity boundaries.
+            equipment_image_path = equipment_image.stem
             equipment_image = Image.open(equipment_image).convert('RGBA')
             scale_factor = random.randint(800_000, 1_400_000)
             object_size = scale_factor / entity_depth
@@ -314,6 +320,7 @@ def main_worker(d_idx):
                 new_graph.append((sub, rel, obj))
             ref_graph = new_graph
             data['descriptors'][replacement_map[equipment_attrs['object_type']]['replace_entity_to']] = equipment_attrs
+            data['paths'][replacement_map[equipment_attrs['object_type']]['replace_entity_to']] = equipment_image_path
             data['replaced_entity'] = entity_to_replace
 
         # apply roles to the scene graph
@@ -341,7 +348,7 @@ def main_worker(d_idx):
 
 
 def main():
-    SYNTHETIC_DATASET_SIZE = 400_000
+    SYNTHETIC_DATASET_SIZE = 200_000
     NUM_WORKERS = 192
     print(f'Using {NUM_WORKERS} workers')
 
