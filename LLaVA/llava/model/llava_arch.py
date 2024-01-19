@@ -140,14 +140,45 @@ class LlavaMetaForCausalLM(ABC):
         image_features = image_features.permute(0, 2, 1)
         return image_features
 
+    def pad_embeddings(self, embeddings, padding_value=0):
+        """
+        Pad the embeddings to have the same number in each batch.
+
+        Args:
+        - embeddings (List[Tensor]): List of embedding tensors, each with shape (num_images, embedding_dim).
+        - padding_value (float): Value to use for padding.
+
+        Returns:
+        - Tensor: Padded embeddings with shape (batch_size, max_num_images, embedding_dim).
+        - Tensor: Mask indicating real data (1) and padding (0).
+        """
+        batch_size = len(embeddings)
+        img_len = embeddings[0].shape[1]
+        embedding_dim = embeddings[0].shape[2]
+        max_num_images = max(emb.shape[0] for emb in embeddings)
+
+        # Initialize padded embeddings and mask
+        padded_embeddings = torch.full((batch_size, max_num_images, img_len, embedding_dim), padding_value, dtype=embeddings[0].dtype, device=embeddings[0].device)
+        mask = torch.zeros(batch_size, max_num_images*img_len, dtype=torch.bool, device=embeddings[0].device)
+
+        # Pad each item in the batch
+        for idx, emb in enumerate(embeddings):
+            num_images = emb.shape[0]
+            padded_embeddings[idx, :num_images] = emb
+            mask[idx, :num_images*img_len] = 1
+
+        return padded_embeddings.flatten(1,2), mask
+
     def encode_images_pooled(self, images, split_sizes):
         image_pooler = self.get_image_pooler()
         image_features = self.get_model().get_vision_tower()(images)
         if split_sizes is not None:
             image_features = torch.split(image_features, split_sizes, dim=0)
-            image_features = image_pooler(torch.stack(image_features).flatten(1, 2))
+            image_features, mask  = self.pad_embeddings(image_features)
+            image_features = image_pooler(image_features, mask)
         else:
-            image_features = image_pooler(image_features)
+            mask = torch.ones((image_features.shape[0], image_features.shape[1]), dtype=torch.bool, device=image_features[0].device)
+            image_features = image_pooler(image_features, mask)
         image_features = self.get_model().mm_projector(image_features)
         return image_features
 

@@ -189,13 +189,14 @@ def main():
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SYMBOLIC_SG = True
     SPLIT = 'train'
+    views_to_use = (2,)
     # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
     if COMPACT_TEMPORAL:
         NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg'
     elif SYMBOLIC_SG:
         NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_symbolic_{SG_INDICATOR}sg'
     else:
-        NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg'
+        NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg_{len(views_to_use)}view'
     if not INCLUDE_TIMEPOINT:
         NAME += '_notimepoints'
     if DROP_HISTORY is not False and DROP_HISTORY > 0.01:
@@ -217,7 +218,7 @@ def main():
 
     dataset = ORDataset(config, SPLIT)
 
-    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG=SYMBOLIC_SG)
+    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG=SYMBOLIC_SG,views_to_use=views_to_use)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies

@@ -147,7 +147,7 @@ class OracleWrapper:
         stopping_criteria = KeywordsStoppingCriteria([stop_str], self.tokenizer, input_ids)
 
         with torch.inference_mode():
-            print(f'Length of input_ids: {input_ids.shape[1]}')
+            #print(f'Length of input_ids: {input_ids.shape[1]}')
             output_ids = self.model.generate(
                 input_ids,
                 images=image_tensor,

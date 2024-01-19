@@ -16,6 +16,7 @@
 import math
 import os
 import copy
+import random
 from dataclasses import dataclass, field
 import json
 import logging
@@ -73,6 +74,7 @@ class DataArguments:
     image_folder: Optional[str] = field(default=None)
     image_aspect_ratio: str = 'square'
     do_augment: bool = field(default=False)
+    do_img_order_augment: bool = field(default=False)
 
 
 @dataclass
@@ -170,7 +172,7 @@ def get_mm_adapter_state_maybe_zero_3(named_params, keys_to_match):
 def find_all_linear_names(model):
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['mm_projector', 'vision_tower', 'vision_resampler']
+    multimodal_keywords = ['mm_projector', 'vision_tower', 'vision_resampler', 'image_pooler']
     for name, module in model.named_modules():
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
             continue
@@ -760,6 +762,7 @@ class LazySupervisedDataset(Dataset):
         self.tokenizer = tokenizer
         self.list_data_dict = list_data_dict
         self.data_args = data_args
+        self.do_img_order_augment = self.data_args.do_img_order_augment
         if self.data_args.do_augment:
             self.augment = TrivialAugmentWide(strength=1.0)
         else:
@@ -792,10 +795,19 @@ class LazySupervisedDataset(Dataset):
         assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
         if 'image' in sources[0]:
             image_file = self.list_data_dict[i]['image']
+
+            if self.do_img_order_augment:
+                random.shuffle(image_file)
+                n_images = random.randint(1,len(image_file))
+                image_file = image_file[:n_images]
+
             image_folder = self.data_args.image_folder
             processor = self.data_args.image_processor
             if type(image_file) == list:
                 image = [Image.open(os.path.join(image_folder, image_file)).convert('RGB') for image_file in image_file]
+                # augment images
+                if self.augment is not None:
+                    image = [self.augment(image) for image in image]
                 if self.data_args.image_aspect_ratio == 'pad':
                     def expand2square(pil_img, background_color):
                         width, height = pil_img.size
@@ -1096,7 +1108,7 @@ def train():
             for p in model.get_model().mm_projector.parameters():
                 p.requires_grad = False
 
-        # reinitialize image_pooler
+        # reinitialize image_pooler # TODO is this necesary?
         model.get_model().image_pooler.bert = model.get_model().image_pooler.bert.apply(model.get_model().image_pooler.bert._init_weights)
 
         if training_args.bits in [4, 8]:

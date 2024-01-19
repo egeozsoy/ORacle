@@ -171,7 +171,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                     new_k = k.replace('model.image_pooler.', '')
                     new_image_pooler_state_dict[new_k] = v
             print('Loading additional image pooler weights...')
-            image_pooler.load_state_dict(new_image_pooler_state_dict, strict=False)
+            image_pooler.load_state_dict(new_image_pooler_state_dict, strict=True)
 
     if hasattr(model.config, "max_sequence_length"):
         context_len = model.config.max_sequence_length
