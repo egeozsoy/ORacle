@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import itertools
 import json
+import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -17,6 +18,7 @@ from LLaVA.llava.conversation import conv_templates, SeparatorStyle
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token, KeywordsStoppingCriteria
 from LLaVA.llava.model.builder import load_pretrained_model
 from LLaVA.llava.utils import disable_torch_init
+from scene_graph_prediction.llava_helpers.scene_graph_converters import llava_sg_to_surgery_sg, surgery_sg_to_memory_str
 from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import map_scene_graph_name_to_vocab_idx, map_vocab_idx_to_scene_graph_name, reversed_role_synonyms
 
 
@@ -43,6 +45,7 @@ class OracleWrapper:
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(model_path, model_base, self.model_name, load_8bit, load_4bit)
         self.model.config.mv_type = self.mconfig['mv_type']
         self.model.config.tokenizer_padding_side = "left"
+        self.temporal_online_prediction = False
         if 'temporality' in config and config['temporality'] == 'GT':
             print('Loading temporality GT')
             self.take_timepoint_to_memory_str = {}
@@ -50,6 +53,10 @@ class OracleWrapper:
                 self.take_timepoint_to_memory_str = json.load(f)
             with open('data/llava_samples/val_50perm_Truetemp_doublemem_Truetempaug_longshort_doublesg_take_timepoint_to_memory_str.json') as f:
                 self.take_timepoint_to_memory_str.update(json.load(f))
+        elif 'temporality' in config and config['temporality'] == 'PRED':
+            print('Preparing temporality PRED')
+            self.take_to_history = defaultdict(list)
+            self.temporal_online_prediction = True
 
     def forward(self, batch):
 
@@ -82,22 +89,40 @@ class OracleWrapper:
             # TODO this would need adapting if the prompt changes
             # inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
             # inp = "Describe this image at timepoint T using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
-            inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
+            # inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
+            if '_symbolic' in self.model_name:  # TODO this shall not be hardcoded :D
+                # inp = 'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: Primary operator in surgery, handles critical tasks. B: Supports head surgeon, assists in surgical tasks. C: Coordinates OR activities and tools. D: Assists in surgical prep and recovery. E: Administers anesthesia, monitors patient. F: Undergoes surgical procedure. G: Metallic object sometimes covered with sheets. Holds surgical instruments. H: Central table in OR for patient. I: Holds additional surgical supplies, auxiliary to instrument table. J: Contains devices for anesthesia administration. K: Tools for performing surgical tasks. α: Collaboration between staff. β: Process of affixing knee implants. γ: Sanitization of OR environment and equipment. δ: Proximity of medical staff or equipment to each other in OR. ε: Use of scalpel for incisions on patient. ζ: Utilizing an orange drill in surgery. η: Use of a hammer with wooden holder and gray head in surgery. θ: Grasping surgical instruments. ι: Patient positioned on the operating table. κ: Handling of medical objects like operating tables or anesthesia machines. λ: Includes draping and sterilization. μ: Use of a green/gray saw for surgical procedures on patient. ν: Stitching using medical scissors. ξ: Physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
+                inp = 'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: Primary operator in surgery, handles critical tasks. B: Supports head surgeon, assists in surgical tasks. C: Coordinates OR activities and tools. D: Assists in surgical prep and recovery. E: Administers anesthesia, monitors patient. F: Undergoes surgical procedure. G: Instrument table, blue, large, rectangular, matte. H: Operating table, black, large, rectangular, rubber. I: Secondary table, gray, large, rectangular, metal. J: Anesthesia equipment, white, large, irregular, matte. K: Instrument, handheld. α: Collaboration between staff. β: Use of a tool: black, handheld, straight, metal, surgical bone cement gun. γ: Use of a tool: white, handheld, irregular, sanitization equipment. δ: Proximity of medical staff or equipment to each other in OR. ε: Use of a tool: white, small, straight, plastic, scalpel. ζ: Use of a tool: orange, handheld, L-shape, plastic, surgical drill. η: Use of a tool: brown, handheld, T-shape, metal, surgical hammer. θ: Grasping surgical instruments. ι: Patient positioned on the operating table. κ: Handling of medical objects like operating tables or anesthesia machines. λ: Includes draping and sterilization. μ: Use of a tool: green, handheld, round, plastic, surgical bone saw. ν: Use of a tool: gray, small, straight, metal, surgical scissors. ξ: Physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
+            else:
+                inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary ta ble, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
             # first message
             if self.model.config.mm_use_im_start_end:
                 inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
             else:
                 inp = DEFAULT_IMAGE_TOKEN + '\n' + inp
-            if 'temporality' in self.config and self.config['temporality'] == 'GT':
-                take_idx, timepoint_idx, _ = elem['scan_id'].split('_')
-                take_idx = int(take_idx)
-                timepoint_idx = int(timepoint_idx)
-                take_timepoint = f'{take_idx}_{timepoint_idx}'
-                memory_str = self.take_timepoint_to_memory_str[take_timepoint]
-                # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
+            if 'temporality' in self.config:
+                if self.config['temporality'] == 'GT':
+                    take_idx, timepoint_idx, _ = elem['scan_id'].split('_')
+                    take_idx = int(take_idx)
+                    timepoint_idx = int(timepoint_idx)
+                    take_timepoint = f'{take_idx}_{timepoint_idx}'
+                    memory_str = self.take_timepoint_to_memory_str[take_timepoint]
+                elif self.config['temporality'] == 'PRED':
+                    take_idx = elem['take_idx']
+                    timepoint_idx = int(elem['scan_id'].split('_')[1])
+                    raw_triplets = self.take_to_history[take_idx]
+                    if self.config['COMPACT_TEMPORAL']:
+                        surgery_sg_triplets = llava_sg_to_surgery_sg(raw_triplets, entity_of_interest='patient', IRRELEVANT_PREDS=['closeto', 'closeTo', 'holding', 'touching'])
+                    else:
+                        surgery_sg_triplets = llava_sg_to_surgery_sg(raw_triplets, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
+                    surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint_idx]
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint_idx, TEMPORAL_STYLE='longshort', COMPACT_TEMPORAL=False)
+                else:
+                    raise NotImplementedError()
                 if len(memory_str) > 5000:
                     print(f'Warning: memory string is too long ({len(memory_str)} chars)')
                     memory_str = '...' + memory_str[-5000:]
+                # inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\nMemory: {memory_str}.')
                 inp = inp.replace(f'{DEFAULT_IMAGE_TOKEN}\n', f'{DEFAULT_IMAGE_TOKEN}\n<memory_start>: {memory_str}<memory_end>.\n')
             conv.append_message(conv.roles[0], inp)
 
@@ -134,7 +159,25 @@ class OracleWrapper:
         if batchsize == 1:
             outputs = [self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()]
         else:
-            outputs = self.tokenizer.batch_decode(output_ids[:,input_ids.shape[1]:].tolist(), skip_special_tokens=True)
+            outputs = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1]:].tolist(), skip_special_tokens=True)
+
+        if '_symbolic' in self.model_name:
+            # parse outputs back to head surgeon etc..
+            symbolic_parsed = []
+            # TODO this might need updating
+            replace_map = {'A': 'head surgeon', 'B': 'assistant surgeon', 'C': 'circulator', 'D': 'nurse', 'E': 'anaesthetist', 'F': 'patient', 'G': 'instrument table', 'H': 'operating table',
+                           'I': 'secondary table', 'J': 'anesthesia equipment', 'K': 'instrument', 'α': 'assisting', 'β': 'cementing', 'γ': 'cleaning', 'δ': 'closeTo', 'ε': 'cutting', 'ζ': 'drilling',
+                           'η': 'hammering', 'θ': 'holding', 'ι': 'lyingOn', 'κ': 'manipulating', 'λ': 'preparing', 'μ': 'sawing', 'ν': 'suturing', 'ξ': 'touching'}
+            # we use regex to replace all occurences of the symbols
+            regex = re.compile("|".join(map(re.escape, replace_map.keys())))
+            for output in outputs:
+                # map everything according to replace_map. this replacement has to be done all at once, otherwise we might replace a symbol that was already replaced.
+                cleaned_output = output.replace('<SG>', '').replace('</SG>', '')
+                cleaned_output = regex.sub(lambda match: replace_map[match.group(0)], cleaned_output)
+                cleaned_output = f'<SG>{cleaned_output}</SG>'
+                symbolic_parsed.append(cleaned_output)
+
+            outputs = symbolic_parsed
         return outputs
 
     def reset_metrics(self, split=None):
@@ -160,29 +203,8 @@ class OracleWrapper:
         else:
             raise NotImplementedError()
 
-    def predict(self, batch, batch_idx, dataloader_idx=0):
-        # TODO redo this
-        raise NotImplementedError()
-        obj_pred, rel_pred, _, _, _, _, probs = self(batch, return_meta_data=True)
-        predicted_relations = torch.max(rel_pred.detach(), 1)[1]
-        all_scores = F.softmax(rel_pred, dim=1)
-
-        # Get the scores that correspond to predicted_relations
-        # scores = all_scores[range(rel_pred.shape[0]), predicted_relations]
-        relations = []
-        for idy, (edge, rel) in enumerate(zip(batch['edge_indices'].transpose(0, 1), predicted_relations)):
-            if rel == self.relationNames.index('none'):
-                continue
-            start = edge[0]
-            end = edge[1]
-            start_name = batch['objs_json'][start.item() + 1]
-            end_name = batch['objs_json'][end.item() + 1]
-            rel_name = self.relationNames[rel]
-            # print(f'{start_name} -> {rel_name} -> {end_name}')
-            # if output_scores: relations.append((start_name, rel_name, end_name, scores[idy].item()))
-            relations.append((start_name, rel_name, end_name))
-
-        return (batch['scan_id'], relations)
+    def infer(self, dataloader):
+        return self.validate(dataloader, return_raw_predictions=True)
 
     # def test_step(self, batch, batch_idx): # not for inference
     #     return self.validation_step(batch, batch_idx)
@@ -230,9 +252,10 @@ class OracleWrapper:
                 optimal_human_index_map = human_index_map
         return optimal_human_index_map
 
-    def validate(self, dataloader, limit_val_batches=None, logging_information=None):
+    def validate(self, dataloader, limit_val_batches=None, logging_information=None, return_raw_predictions=False):
         take_rel_preds = defaultdict(list)
         take_rel_gts = defaultdict(list)
+        scan_id_to_raw_predictions = {}  # dictionary to store predicted scene graphs
         # if limit_val_batches is int, then limit the number of batches to this number, if float, then limit the number of batches to this fraction of the total number of batches.
         limit_counter = None
         if isinstance(limit_val_batches, int):
@@ -245,13 +268,23 @@ class OracleWrapper:
                 if limit_counter <= 0:
                     break
                 limit_counter -= 1
+
+            # if self.temporal_online_prediction than assert that batchsize is 1 and sorted. But we can only assert for batchsize 1
+            assert len(batch) == 1 or not self.temporal_online_prediction
+
             outputs = self.forward(batch)
             for idx, output in enumerate(outputs):
+                elem = batch[idx]
+                timepoint = int(elem['scan_id'].split('_')[1])
+                take_idx = elem['take_idx']
+                # remove everything between the first """ and the last """ using regex. This is used for chain of thought
+                output = re.sub(r'""".*?"""', '', output, flags=re.DOTALL)
                 if '<SG>' in output and '</SG>' in output and output.index('<SG>') < output.index('</SG>'):
                     triplet_str = output.split('<SG>')[1].split('</SG>')[0].strip().split(';')
                 else:
                     triplet_str = output.split(';')
                 triplets = []
+                raw_triplets = []
                 human_roles = set()  # Need to be mapped for this evaluation
                 for triplet in triplet_str:
                     triplet = triplet.replace('.', '').replace('</s>', '').replace('<s>', '').strip()
@@ -262,16 +295,21 @@ class OracleWrapper:
                     if len(triplet) != 3:
                         continue
                     sub, obj, pred = triplet
+                    raw_triplets.append((sub, pred, obj))
                     if sub in reversed_role_synonyms:
                         sub = reversed_role_synonyms[sub]
                     if obj in reversed_role_synonyms:
                         obj = reversed_role_synonyms[obj]
-                    if sub in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:  # TODO should patient be here?
+                    if sub in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:
                         human_roles.add(sub)
                     if obj in ['head surgeon', 'assistant surgeon', 'circulator', 'nurse', 'anaesthetist']:
                         human_roles.add(obj)
                     triplets.append((sub, pred, obj))
                 # these have to be mapped. First to human names, also the predicates
+                scan_id_to_raw_predictions[elem['scan_id']] = raw_triplets
+                if self.temporal_online_prediction:
+                    # TODO we could shuffle the raw triplets?
+                    self.take_to_history[take_idx].append({'timepoint_idx': timepoint, 'scene_graph': raw_triplets})
                 human_roles_to_indices = {human_role: f'human_{idx}' for idx, human_role in enumerate(sorted(human_roles))}
                 rel_preds = []
                 for (sub, pred, obj) in triplets:
@@ -322,6 +360,9 @@ class OracleWrapper:
         self.val_take_rel_preds, self.val_take_rel_gts = take_rel_preds, take_rel_gts
         self.evaluate_predictions(None, 'val', logging_information=logging_information)
         self.reset_metrics(split='val')
+
+        if return_raw_predictions:
+            return scan_id_to_raw_predictions
 
     # def test_epoch_end(self, outputs):
     #     return self.validation_epoch_end(outputs)

@@ -14,3 +14,7 @@ CUDA_VISIBLE_DEVICES=0 python -m llava.serve.model_worker --host 0.0.0.0 --contr
 /home/guests/chantal_pellegrini/Oracle/LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora --model-base liuhaotian/llava-v1.5-7b
 
 # TODO try using: liuhaotian/llava-v1.5-7b
+
+# Port forwarding
+
+ssh -N -f -L localhost:7860:127.0.0.1:7860 ege_oezsoy@unimatrix2

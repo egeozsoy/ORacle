@@ -4,6 +4,7 @@ A model worker executes the model.
 import argparse
 import asyncio
 import json
+import re
 import time
 import threading
 import uuid
@@ -184,7 +185,15 @@ class ModelWorker:
         thread.start()
 
         generated_text = ori_prompt
+        # TODO hardcoding this is ugly
+        replace_map = {'A': 'head surgeon', 'B': 'assistant surgeon', 'C': 'circulator', 'D': 'nurse', 'E': 'anaesthetist', 'F': 'patient', 'G': 'instrument table', 'H': 'operating table',
+                       'I': 'secondary table', 'J': 'anesthesia equipment', 'K': 'instrument', 'L': 'Mako', 'α': 'assisting', 'β': 'cementing', 'γ': 'cleaning', 'δ': 'closeTo', 'ε': 'cutting',
+                       'ζ': 'drilling',
+                       'η': 'hammering', 'θ': 'holding', 'ι': 'lyingOn', 'κ': 'manipulating', 'λ': 'preparing', 'μ': 'sawing', 'ν': 'suturing', 'ξ': 'touching', 'ο': 'robotic sawing'}
+        # we use regex to replace all occurences of the symbols
+        regex = re.compile("|".join(map(re.escape, replace_map.keys())))
         for new_text in streamer:
+            new_text = regex.sub(lambda match: replace_map[match.group(0)], new_text)
             generated_text += new_text
             if generated_text.endswith(stop_str):
                 generated_text = generated_text[:-len(stop_str)]

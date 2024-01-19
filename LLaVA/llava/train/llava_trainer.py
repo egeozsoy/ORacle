@@ -18,7 +18,11 @@ from transformers.trainer import (
 )
 from typing import List, Optional
 
-with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_20perm.json') as f:
+# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_20perm.json') as f:
+#     token_frequencies = json.load(f)
+# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_50perm_symbolic.json') as f: # TODO for symbolic
+#     token_frequencies = json.load(f)
+with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_0.2_True.json') as f:  # TODO adjust
     token_frequencies = json.load(f)
 
 token_weights = {k: 1 / v for k, v in token_frequencies.items()}  # linear weighting

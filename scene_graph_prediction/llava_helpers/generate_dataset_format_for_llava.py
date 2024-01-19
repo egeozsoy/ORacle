@@ -6,6 +6,7 @@ import transformers
 
 from helpers.configurations import OR_4D_DATA_ROOT_PATH
 from scene_graph_prediction.llava_helpers.scene_graph_converters import extract_take_int_from_image_path, parse_llava_sg, llava_sg_to_surgery_sg, surgery_sg_to_memory_str
+from scene_graph_prediction.llava_helpers.descriptors import ENTITY_DESCRIPTORS, PREDICATE_DESCRIPTORS, ENTITY_SYMBOLS, PREDICATE_SYMBOLS
 
 warnings.filterwarnings('ignore')
 import argparse
@@ -37,7 +38,7 @@ def load_image_paths(scan_id_no_split):
     return image_paths
 
 
-def scene_graph_to_string(scene_graph, human_idx_to_name, SG_INDICATOR='double'):
+def scene_graph_to_string(scene_graph, human_idx_to_name, SG_INDICATOR='double', SYMBOLIC_SG_MAP=None):
     '''
     Scene graph is a list of relations in the form of (subject, relation, object)
     '''
@@ -59,6 +60,12 @@ def scene_graph_to_string(scene_graph, human_idx_to_name, SG_INDICATOR='double')
         if relation == 'operating':
             relation = 'manipulating'
 
+        if SYMBOLIC_SG_MAP is not None:
+            if subject == 'none' or object == 'none' or relation == 'none':
+                continue
+            subject = SYMBOLIC_SG_MAP["entity_name_to_symbol"][subject]
+            object = SYMBOLIC_SG_MAP["entity_name_to_symbol"][object]
+            relation = SYMBOLIC_SG_MAP["predicate_name_to_symbol"][relation]
         # if subject != 'head surgeon' or object != 'patient': # TODO remove this. This only uses the main action
         #     continue
         out += f'{subject},{object},{relation}; '
@@ -74,9 +81,24 @@ def scene_graph_to_string(scene_graph, human_idx_to_name, SG_INDICATOR='double')
     return out
 
 
-def apply_template(image_paths, scene_graph, timepoint):
+def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, SYMBOLIC_SG_MAP=None):
     # human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
-    human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
+    if INCLUDE_TIMEPOINT:
+        human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
+    elif SYMBOLIC_SG_MAP is not None:
+        # integrate the symbols and knowledge
+        entity_symbol_to_descriptor_sorted = sorted(SYMBOLIC_SG_MAP["entity_symbol_to_descriptor"].items(), key=lambda x: x[0])
+        predicate_symbol_to_descriptor_sorted = sorted(SYMBOLIC_SG_MAP["predicate_symbol_to_descriptor"].items(), key=lambda x: x[0])
+        entity_symbols = ", ".join([elem[0] for elem in entity_symbol_to_descriptor_sorted])
+        predicate_symbols = ", ".join([elem[0] for elem in predicate_symbol_to_descriptor_sorted])
+        human_prompt = f'Entities: [{entity_symbols}]. Predicates: [{predicate_symbols}]. <knowledge_start> '
+        for entity_symbol, descriptor in entity_symbol_to_descriptor_sorted:
+            human_prompt += f'{entity_symbol}: {descriptor} '
+        for predicate_symbol, descriptor in predicate_symbol_to_descriptor_sorted:
+            human_prompt += f'{predicate_symbol}: {descriptor} '
+        human_prompt += f'<knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
+    else:
+        human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
     # TODO potentially modify the input to say <SG>
     id = f'{image_paths[0].parent.parent.stem}/{image_paths[0].stem}'
 
@@ -96,7 +118,7 @@ def apply_template(image_paths, scene_graph, timepoint):
     return sample
 
 
-def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,), SG_INDICATOR='double'):
+def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False):
     samples = []
     for index in range(len(dataset)):
         scan_id = dataset.scans[index]
@@ -126,23 +148,58 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
         for permutation_idx in range(n_permutations):  # TODO does id need to be unique? because right now it is not
             shuffle(relations)  # order should be random
-            scene_graph_string = scene_graph_to_string(relations, human_idx_to_name, SG_INDICATOR=SG_INDICATOR)
-            sample = apply_template(image_paths, scene_graph_string, timepoint=int(pcd_idx))
+            if SYMBOLIC_SG:
+                # we create a symbolic map here. Symbolic map first comes up with a random permutation of entity and predicate symbols. Then it matches every real entity and predicate name with a random symbol.
+                # Also for every real entity and predicate name, it samples a random descriptor from the list of descriptors.
+                entity_name_to_symbol = {}
+                entity_symbol_to_descriptor = {}
+                predicate_name_to_symbol = {}
+                predicate_symbol_to_descriptor = {}
+                entity_symbols = ENTITY_SYMBOLS.copy()
+                predicate_symbols = PREDICATE_SYMBOLS.copy()
+                shuffle(entity_symbols)
+                shuffle(predicate_symbols)
+                for entity_name, descriptors in ENTITY_DESCRIPTORS.items():
+                    entity_name_to_symbol[entity_name] = entity_symbols.pop()
+                    entity_symbol_to_descriptor[entity_name_to_symbol[entity_name]] = random.choice(descriptors)
+                for predicate_name, descriptors in PREDICATE_DESCRIPTORS.items():
+                    predicate_name_to_symbol[predicate_name] = predicate_symbols.pop()
+                    predicate_symbol_to_descriptor[predicate_name_to_symbol[predicate_name]] = random.choice(descriptors)
+
+                symbolic_sg_map = {'entity_name_to_symbol': entity_name_to_symbol, 'entity_symbol_to_descriptor': entity_symbol_to_descriptor, 'predicate_name_to_symbol': predicate_name_to_symbol,
+                                   'predicate_symbol_to_descriptor': predicate_symbol_to_descriptor}
+            else:
+                symbolic_sg_map = None
+            scene_graph_string = scene_graph_to_string(relations, human_idx_to_name, SG_INDICATOR=SG_INDICATOR, SYMBOLIC_SG_MAP=symbolic_sg_map)
+            sample = apply_template(image_paths, scene_graph_string, timepoint=int(pcd_idx), INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG_MAP=symbolic_sg_map)
             samples.append(sample)
 
     return samples
 
 
 def main():
-    N_PERM = 50
-    ADD_TEMPORAL = True
-    WITH_TEMPORAL_AUG = True
+    N_PERM = 20
+    ADD_TEMPORAL = False
+    WITH_TEMPORAL_AUG = False
     MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
-    TEMPORAL_STYLE = 'longshort'  # can be longshort or all
+    TEMPORAL_STYLE = 'longshort'  # can be longshort or all or longshort_compact
+    COMPACT_TEMPORAL = False
+    INCLUDE_TIMEPOINT = False
+    DROP_HISTORY = 0.5  # either False or float
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
+    SYMBOLIC_SG = True
     SPLIT = 'train'
-    # TODO other stuff we want to integrate we can do here as well.
-    NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg'
+    # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
+    if COMPACT_TEMPORAL:
+        NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg'
+    elif SYMBOLIC_SG:
+        NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_symbolic_{SG_INDICATOR}sg'
+    else:
+        NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg'
+    if not INCLUDE_TIMEPOINT:
+        NAME += '_notimepoints'
+    if DROP_HISTORY is not False and DROP_HISTORY > 0.01:
+        NAME += f'_drophistory{DROP_HISTORY}'
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -160,7 +217,7 @@ def main():
 
     dataset = ORDataset(config, SPLIT)
 
-    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR)
+    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG=SYMBOLIC_SG)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -191,9 +248,10 @@ def main():
             for take_scene_graph in take_scene_graphs:
                 scene_graph = parse_llava_sg(take_scene_graph['conversations'][1]['value'])
                 take_scene_graphs_reformatted.append({'timepoint_idx': take_scene_graph['timepoint'], 'scene_graph': scene_graph})
-
-            # surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient')
-            surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest=None)
+            if COMPACT_TEMPORAL:
+                surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient', IRRELEVANT_PREDS=['closeto', 'closeTo', 'holding', 'touching'])
+            else:
+                surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
             with open(f'data/llava_samples/surgery_sg_{take_int}.json', 'w') as f:
                 json.dump(surgery_sg_triplets, f)
             take_to_history[take_int] = surgery_sg_triplets
@@ -206,7 +264,8 @@ def main():
             surgery_sg_triplets = take_to_history[take_int]
             timepoint = llava_scene_graph['timepoint']
             surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint]
-            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE=TEMPORAL_STYLE)
+            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE=TEMPORAL_STYLE, COMPACT_TEMPORAL=COMPACT_TEMPORAL,
+                                                  INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT)
             take_timepoint_to_memory_str[f'{take_int}_{timepoint}'] = memory_str
             input = llava_scene_graph['conversations'][0]['value']
 
@@ -215,9 +274,14 @@ def main():
                 if p < 0.5:
                     memory_str = None
                 elif p < 0.666:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='short')
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='short', COMPACT_TEMPORAL=COMPACT_TEMPORAL,
+                                                          INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
                 elif p < 0.833:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='long')
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='long', COMPACT_TEMPORAL=COMPACT_TEMPORAL,
+                                                          INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
+                else:
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='longshort', COMPACT_TEMPORAL=COMPACT_TEMPORAL,
+                                                          INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
 
             if memory_str is not None:
                 if MEMORY_INDICATOR == 'single':
@@ -240,8 +304,12 @@ def main():
         json.dump(samples, f, indent=4)
 
     if SPLIT == 'train' and not ADD_TEMPORAL:
-        with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm.json', 'w') as f:
-            json.dump(token_freq, f, indent=4)
+        if SYMBOLIC_SG:
+            with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm_symbolic.json', 'w') as f:
+                json.dump(token_freq, f, indent=4)
+        else:
+            with open(f'data/llava_samples/train_token_freqs_7b_{N_PERM}perm.json', 'w') as f:
+                json.dump(token_freq, f, indent=4)
 
 
 if __name__ == '__main__':
