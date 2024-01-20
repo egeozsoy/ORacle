@@ -4,6 +4,7 @@ A model worker executes the model.
 import argparse
 import asyncio
 import json
+import os
 import re
 import time
 import threading
@@ -121,9 +122,30 @@ class ModelWorker:
     @torch.inference_mode()
     def generate_stream(self, params):
         tokenizer, model, image_processor = self.tokenizer, self.model, self.image_processor
-
         prompt = params["prompt"]
+        if "DES:" in prompt:
+            vis_knowledge_paths = prompt.split("DES:")[1].split("DES_END")[0].split(",")
+            prompt = prompt.split("DES:")[0] + prompt.split("DES_END")[1]
+
+        else:
+            vis_knowledge_paths = [
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/anesthesia equipment_take1.pt',
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/cementing_take1.pt',
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/cutting_take1.pt',
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/drilling_take1.pt',
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/hammering_take1.pt',
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/sawing_take1.pt',
+                '/home/guests/chantal_pellegrini/Oracle/data/original_crops/suturing_take1.pt'
+            ]
+
         print(prompt)
+
+        vis_descriptor_embs = []
+        for vis_knowledge_path in vis_knowledge_paths:
+            vis_knowledge_path = f'/home/guests/chantal_pellegrini/Oracle/{vis_knowledge_path}'
+            vis_descriptor_emb = torch.load(vis_knowledge_path, map_location='cuda')
+            vis_descriptor_embs.append(vis_descriptor_emb)
+
         ori_prompt = prompt
         images = params.get("images", None)
         num_image_tokens = 0
@@ -148,7 +170,7 @@ class ModelWorker:
                 num_image_tokens = prompt.count(replace_token) * model.get_vision_tower().num_patches
             else:
                 images = None
-            image_args = {"images": images}
+            image_args = {"images": images, "vis_descriptor_embs": vis_descriptor_embs}
         else:
             images = None
             image_args = {}

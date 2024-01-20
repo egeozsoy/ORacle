@@ -63,19 +63,19 @@ class ORDataset(Dataset):
 
         if split == 'val' or split == 'test' and self.config['USE_VIS_DESC']:
             self.vis_knowledge_paths = [
-                'data/test_crops/anesthesia_take1_010056.pt',
-                'data/test_crops/cementing_take1_017586.pt',
-                'data/test_crops/cutting_take1_012216.pt',
-                'data/test_crops/drilling_take1_014256.pt',
-                'data/test_crops/hammering_take1_015726.pt',
-                'data/test_crops/sawing_take1_013866.pt',
-                'data/test_crops/suturing_take1_018456.pt'
-            ]
+            'data/original_crops/anesthesia equipment_take1.pt',
+            'data/original_crops/cementing_take1.pt',
+            'data/original_crops/cutting_take1.pt',
+            'data/original_crops/drilling_take1.pt',
+            'data/original_crops/hammering_take1.pt',
+            'data/original_crops/sawing_take1.pt',
+            'data/original_crops/suturing_take1.pt'
+        ]
 
-            self.vis_knowledge_embs = []
+            self.vis_descriptor_embs = []
             for vis_knowledge_path in self.vis_knowledge_paths:
-                vis_knowledge_emb = torch.load(vis_knowledge_path, map_location='cpu')
-                self.vis_knowledge_embs.append(vis_knowledge_emb)
+                vis_descriptor_emb = torch.load(vis_knowledge_path, map_location='cpu')
+                self.vis_descriptor_embs.append(vis_descriptor_emb)
 
     def collate_fn(self, batch):
         for idx, elem in enumerate(batch):
@@ -157,6 +157,6 @@ class ORDataset(Dataset):
 
         if self.config['USE_VIS_DESC']:
             if self.split == 'val' or self.split == 'test': #in validation and test we always need the same vis descriptors
-                sample['vis_knowledge_embs'] = self.vis_knowledge_embs
+                sample['vis_descriptor_embs'] = self.vis_descriptor_embs
 
         return sample

@@ -13,7 +13,7 @@ from PIL import Image
 from sklearn.metrics import classification_report
 from tqdm import tqdm
 
-from LLaVA.llava.constants import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_END_TOKEN, IMAGE_TOKEN_INDEX, DEFAULT_IM_START_TOKEN
+from LLaVA.llava.constants import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_END_TOKEN, IMAGE_TOKEN_INDEX, DEFAULT_IM_START_TOKEN, VIS_DESCRIPTOR_TOKEN
 from LLaVA.llava.conversation import conv_templates, SeparatorStyle
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token, KeywordsStoppingCriteria
 from LLaVA.llava.model.builder import load_pretrained_model
@@ -72,7 +72,7 @@ class OracleWrapper:
         batchsize = len(batch)
         all_images = []
         all_prompts = []
-        all_vis_knowledge_embs = []
+        all_vis_descriptor_embs = []
         for elem in batch:
             conv = conv_templates[conv_mode].copy()
 
@@ -99,8 +99,8 @@ class OracleWrapper:
 
             if 'use_visual_prompting' in self.config and self.config['use_visual_prompting'] == 'True':
                 # order of img_patches: anesthesia machine, cementing, cutting, drilling, hammering, sawing, suturing
-                inp = 'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: Primary operator in surgery, handles critical tasks. B: Supports head surgeon, assists in surgical tasks. C: Coordinates OR activities and tools. D: Assists in surgical prep and recovery. E: Administers anesthesia, monitors patient. F: Undergoes surgical procedure. G: Instrument table, blue, large, rectangular, matte. H: Operating table, black, large, rectangular, rubber. I: Secondary table, gray, large, rectangular, metal. J: <vis_descriptor> K: Instrument, handheld. α: Collaboration between staff. β: <vis_descriptor>. γ: Use of a tool: white, handheld, irregular, sanitization equipment. δ: Proximity of medical staff or equipment to each other in OR. ε: <vis_descriptor>. ζ: <vis_descriptor>. η: <vis_descriptor>. θ: Grasping surgical instruments. ι: Patient positioned on the operating table. κ: Handling of medical objects like operating tables or anesthesia machines. λ: Includes draping and sterilization. μ: <vis_descriptor>. ν: <vis_descriptor>. ξ: Physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
-                all_vis_knowledge_embs.append(elem['vis_knowledge_embs'])
+                inp = f'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: Primary operator in surgery, handles critical tasks. B: Supports head surgeon, assists in surgical tasks. C: Coordinates OR activities and tools. D: Assists in surgical prep and recovery. E: Administers anesthesia, monitors patient. F: Undergoes surgical procedure. G: Instrument table, blue, large, rectangular, matte. H: Operating table, black, large, rectangular, rubber. I: Secondary table, gray, large, rectangular, metal. J: {VIS_DESCRIPTOR_TOKEN}. K: Instrument, handheld. α: Collaboration between staff. β: use of a tool: {VIS_DESCRIPTOR_TOKEN}. γ: use of a tool: white, handheld, irregular, sanitization equipment. δ: Proximity of medical staff or equipment to each other in OR. ε: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ζ: use of a tool: {VIS_DESCRIPTOR_TOKEN}. η: use of a tool: {VIS_DESCRIPTOR_TOKEN}. θ: Grasping surgical instruments. ι: Patient positioned on the operating table. κ: Handling of medical objects like operating tables or anesthesia machines. λ: Includes draping and sterilization. μ: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ν: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ξ: Physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
+                all_vis_descriptor_embs.append(elem['vis_descriptor_embs'])
             
             
             # first message
@@ -163,7 +163,7 @@ class OracleWrapper:
                 use_cache=True,
                 max_new_tokens=300,
                 stopping_criteria=[stopping_criteria],
-                vis_descriptor_embs=all_vis_knowledge_embs if 'USE_VIS_DESC' in self.config and self.config['USE_VIS_DESC'] else None
+                vis_descriptor_embs=all_vis_descriptor_embs if 'USE_VIS_DESC' in self.config and self.config['USE_VIS_DESC'] else None
             )
         if batchsize == 1:
             outputs = [self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()]

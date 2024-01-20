@@ -64,11 +64,6 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                 model.lm_head.weight = torch.nn.Parameter(torch.empty(token_num, tokem_dim, device=model.device, dtype=model.dtype))
                 model.model.embed_tokens.weight = torch.nn.Parameter(torch.empty(token_num, tokem_dim, device=model.device, dtype=model.dtype))
 
-            if 'visual_prompting' in model_name.lower():
-                # add symbolic image tokens to tokenizer
-                tokenizer.add_tokens(['<vis_descriptor>'])
-                model.resize_token_embeddings(len(tokenizer))
-
             print('Loading additional LLaVA weights...')
             if os.path.exists(os.path.join(model_path, 'non_lora_trainables.bin')):
                 non_lora_trainables = torch.load(os.path.join(model_path, 'non_lora_trainables.bin'), map_location='cpu')
