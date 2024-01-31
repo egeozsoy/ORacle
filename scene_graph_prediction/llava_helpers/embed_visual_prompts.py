@@ -8,11 +8,16 @@ from tqdm import tqdm
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images
 from LLaVA.llava.model.builder import load_pretrained_model
 
+from torch.utils.data._utils.collate import default_collate
+
 class ImageDataset(Dataset):
     def __init__(self, img_path, use_aug, num_aug=10):
         self.image_paths = [os.path.join(img_path, fname) for fname in os.listdir(img_path) if fname.endswith('.jpg')]
         self.use_aug = use_aug
         self.num_aug = num_aug
+        self.transforms = transforms.Compose([
+            transforms.ToTensor(),  # Convert PIL images to Tensors
+        ])
         self.augmentations = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(30),
@@ -37,10 +42,14 @@ class ImageDataset(Dataset):
             return image, os.path.basename(image_path).split('.')[0] + '.pt'
 
 def process_and_extract_features(img_batch, model, image_processor):
-    img_batch = process_images(img_batch, image_processor, model.config)
-    img_batch = img_batch.to(torch.float16)
     image_features_batch = model.get_vision_tower().global_forward(img_batch.squeeze())
     return model.model.mm_projector(image_features_batch)
+
+def custom_collate_fn(batch):
+    # Separate images and paths
+    images, paths = zip(*batch)
+    return images, default_collate(paths)  # paths are collated normally
+
 
 if __name__ == '__main__':
     # Load vision encoder of LLaVA
@@ -50,13 +59,13 @@ if __name__ == '__main__':
     model = model.to(torch.float16)
 
     USE_AUG = True
-    img_path = "data/original_crops"
+    # img_path = "data/original_crops/crops_for_embs/"
     img_path = "synthetic_or_generation/vis_descriptors/"
-    batch_size = 12 if USE_AUG else 128
+    batch_size = 100
 
     # Create Dataset and DataLoader
     dataset = ImageDataset(img_path, USE_AUG)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, collate_fn=custom_collate_fn)
 
     for batch_images, batch_paths in tqdm(dataloader):
         img_batch = process_images(batch_images, image_processor, model.config)

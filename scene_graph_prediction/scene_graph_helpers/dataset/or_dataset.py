@@ -61,7 +61,7 @@ class ORDataset(Dataset):
             self.image_transform_pre = T.Compose(self.full_image_transformations.transforms[:2])
             self.image_transform_post = T.Compose(self.full_image_transformations.transforms[2:])
 
-        if split == 'val' or split == 'test' and self.config['USE_VIS_DESC']:
+        if self.config['USE_VIS_DESC']:
             self.vis_knowledge_paths = [
             'data/original_crops/anesthesia equipment_take1.pt',
             'data/original_crops/cementing_take1.pt',
@@ -156,7 +156,6 @@ class ORDataset(Dataset):
         sample['relations_tokenized'] = relations_tokenized
 
         if self.config['USE_VIS_DESC']:
-            if self.split == 'val' or self.split == 'test': #in validation and test we always need the same vis descriptors
-                sample['vis_descriptor_embs'] = self.vis_descriptor_embs
+            sample['vis_descriptor_embs'] = self.vis_descriptor_embs
 
         return sample

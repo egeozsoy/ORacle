@@ -164,7 +164,7 @@ def _fake_attributes(FAKE_P, object_to_valid_attributes, name, picked_attributes
     return None
 
 def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False, FAKE_ATTRIBUTES=False,
-                                FAKE_P=0.2):
+                                FAKE_P=0.2, CROP_AUGS = False):
     samples = []
     all_image_paths = list(path.glob('*.jpg'))
     shuffle(all_image_paths)
@@ -186,12 +186,6 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
     for descriptor_path in all_visual_descriptors:
         object_type = descriptor_path.stem.split('_')[0]
         object_to_descriptor_paths[object_type].append(descriptor_path.stem)
-
-    original_visual_descriptors = list(Path('data/original_crops').glob('*.pt'))
-    object_to_descriptor_paths_original = defaultdict(list)
-    for descriptor_path in original_visual_descriptors:
-        object_type = descriptor_path.stem.split('_')[0]
-        object_to_descriptor_paths_original[object_type].append(descriptor_path.stem)
 
     for image_path in tqdm(all_image_paths):
         image_json = image_path_to_json[image_path]
@@ -251,23 +245,39 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     if FAKE_ATTRIBUTES:
                         entity_to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, entity_name, picked_attributes)
                         if entity_to_delete is not None: entities_to_delete.append(entity_to_delete)
+                    else:
+                        entity_to_delete = None
                     if entity_name in image_descriptor_paths: #synthetic object
                         if entity_name == entity_to_delete: #object got fake attributes -> choose random crop with fitting attributes
                             path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                            crop_path = random.choice([path for path in object_to_descriptor_paths[entity_name] if path.startswith(path_prefix)]) + ".pt"
+                            if CROP_AUGS:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[entity_name] if path.startswith(path_prefix)]) +".pt"
+                            else:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[entity_name] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                         else:
-                            crop_path = image_descriptor_paths[entity_name] + "_crop.pt"
+                            if CROP_AUGS:
+                                random_aug_nr = random.randint(0, 9)
+                                crop_path = image_descriptor_paths[entity_name] + f"_crop_aug_{random_aug_nr}.pt"
+                            else:
+                                crop_path = image_descriptor_paths[entity_name] + "_crop.pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                     else: # real 4D-OR object
                         if entity_name == entity_to_delete: #object got fake attributes -> choose random crop with fitting attributes
                             path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                            crop_path = random.choice([path for path in object_to_descriptor_paths[entity_name] if path.startswith(path_prefix)]) + ".pt"
+                            if CROP_AUGS:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[entity_name] if path.startswith(path_prefix)]) + ".pt"
+                            else:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[entity_name] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                         else:
-                            crop_path = f'data/original_crops/{entity_name}_take1.pt'
+                            if CROP_AUGS:
+                                random_aug_nr = random.randint(0, 99)
+                                crop_path = f'data/original_crops/{entity_name}_take1_aug_{random_aug_nr}.pt'
+                            else:
+                                crop_path = f'data/original_crops/{entity_name}_take1.pt'
                     vis_descriptor_paths[entity_name] = crop_path
-                    text_descriptor = VIS_DESCRIPTOR_TOKEN
+                    text_descriptor = f'{VIS_DESCRIPTOR_TOKEN}.'
                     entity_descriptors[entity_name] = [text_descriptor]
                 else:
                     raise NotImplementedError
@@ -282,23 +292,39 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     if FAKE_ATTRIBUTES:
                         predicate_to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, predicate_name, picked_attributes)
                         if predicate_to_delete is not None: predicates_to_delete.append(predicate_to_delete)
+                    else:
+                        predicate_to_delete = None
                     if predicate_name in image_descriptor_paths: #synthetic object
                         if predicate_name == predicate_to_delete: #object got fake attributes -> choose random crop with fitting attributes
                             path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                            crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                            if CROP_AUGS:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                            else:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                         else:
-                            crop_path = image_descriptor_paths[predicate_name] + "_crop.pt"
+                            if CROP_AUGS:
+                                random_aug_nr = random.randint(0, 9)
+                                crop_path = image_descriptor_paths[predicate_name] + f"_crop_aug_{random_aug_nr}.pt"
+                            else:
+                                crop_path = image_descriptor_paths[predicate_name] + "_crop.pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                     else: # real 4D-OR object
                         if predicate_name == predicate_to_delete: #object got fake attributes -> choose random crop with fitting attributes
                             path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                            crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                            if CROP_AUGS:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                            else:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                         else:
-                            crop_path = f'data/original_crops/{predicate_name}_take1.pt'
+                            if CROP_AUGS:
+                                random_aug_nr = random.randint(0, 99)
+                                crop_path = f'data/original_crops/{predicate_name}_take1_aug_{random_aug_nr}.pt'
+                            else:
+                                crop_path = f'data/original_crops/{predicate_name}_take1.pt'
                     vis_descriptor_paths[predicate_name] = crop_path
-                    text_descriptor = f'use of tool: {VIS_DESCRIPTOR_TOKEN}.'
+                    text_descriptor = f'use of a tool: {VIS_DESCRIPTOR_TOKEN}.'
                     predicate_descriptors[predicate_name] = [text_descriptor]
                 else:
                     raise NotImplementedError
@@ -315,7 +341,10 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                             name_tmp = name.lower().replace('_', ' ')
                         if is_predicate:
                             name_tmp = name[0].lower() + name[1:]
-                        to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, name_tmp, picked_attributes)
+                        if FAKE_ATTRIBUTES:
+                            to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, name_tmp, picked_attributes)
+                        else:
+                            to_delete = None
                         if to_delete is not None:
                             if is_entity: entities_to_delete.append(to_delete)
                             if is_predicate: predicates_to_delete.append(to_delete)
@@ -328,7 +357,7 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     if descriptors['object_type'] in INSTRUMENTS:
                         # first letter of name should be lowered
                         name = name[0].lower() + name[1:]
-                        predicate_descriptors[name] = [f'use of a tool: {text_descriptor}.']
+                        predicate_descriptors[name] = [f'use of a tool: {text_descriptor}']
                     elif descriptors['object_type'] in EQUIPMENT:
                         name = name.lower().replace('_', ' ')
                         entity_descriptors[name] = [text_descriptor]
@@ -338,15 +367,25 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     if name in image_descriptor_paths: #synthetic object
                         if is_inscene and name == to_delete: #object got fake attributes -> choose random crop with fitting attributes
                             path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                            crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                            if CROP_AUGS:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                            else:
+                                crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                         else:
-                            crop_path = image_descriptor_paths[name] + "_crop.pt"
+                            if CROP_AUGS:
+                                random_aug_nr = random.randint(0, 9)
+                                crop_path = image_descriptor_paths[name] + f"_crop_aug_{random_aug_nr}.pt"
+                            else:
+                                crop_path = image_descriptor_paths[name] + "_crop.pt"
                             crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
-                    else: # real 4D-OR object
+                    else: # image not in scene
                         assert is_inscene == False # this iterates only through synthetic objects and negative samples
                         path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                        crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                        if CROP_AUGS:
+                            crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix)]) + ".pt"
+                        else:
+                            crop_path = random.choice([path for path in object_to_descriptor_paths[picked_attributes["object_type"]] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
                         crop_path = "synthetic_or_generation/vis_descriptors/" + crop_path
                     vis_descriptor_paths[name] = crop_path
 
@@ -396,7 +435,8 @@ def main():
     SYMBOLIC_SG = True
     SPLIT = 'train'
     FAKE_ATTRIBUTES = True
-    FAKE_P = 0.5
+    CROP_AUGS = True
+    FAKE_P = 0.2
     # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
     if COMPACT_TEMPORAL:
         NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg_synthetic'
@@ -410,6 +450,8 @@ def main():
         NAME += '_notimepoints'
     if DROP_HISTORY is not False and DROP_HISTORY > 0.01:
         NAME += f'_drophistory{DROP_HISTORY}'
+    if CROP_AUGS:
+        NAME += '_cropaugs'
 
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
@@ -427,7 +469,7 @@ def main():
 
     samples = generate_finetuning_samples(Path('synthetic_or_generation/synthetic_4D-OR'), SG_INDICATOR=SG_INDICATOR,
                                           INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
-                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P)
+                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, CROP_AUGS=CROP_AUGS)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -522,7 +564,7 @@ def main():
 
     if SPLIT == 'train' and not ADD_TEMPORAL:
         if SYMBOLIC_SG:
-            with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_visual.json', 'w') as f:
+            with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_visual_noaug_negdesc.json', 'w') as f:
                 json.dump(token_freq, f, indent=4)
         else:
             raise NotImplementedError
