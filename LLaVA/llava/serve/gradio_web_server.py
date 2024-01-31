@@ -191,7 +191,8 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, request:
             template_name = "llama_2"
         else:
             template_name = "vicuna_v1"
-        new_state = conv_templates[template_name].copy()
+        # new_state = conv_templates[template_name].copy()
+        new_state = default_conversation.copy()
         new_state.append_message(new_state.roles[0], state.messages[-2][1])
         new_state.append_message(new_state.roles[1], None)
         state = new_state

@@ -99,7 +99,6 @@ def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, 
         human_prompt += f'<knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
     else:
         human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
-    # TODO potentially modify the input to say <SG>
     id = f'{image_paths[0].parent.parent.stem}/{image_paths[0].stem}'
 
     sample = {'id': id, 'timepoint': timepoint, 'image': [str(image_path.absolute()) for image_path in image_paths] if len(image_paths) > 1 else str(image_paths[0].absolute()),
@@ -178,7 +177,7 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
 
 def main():
-    N_PERM = 20
+    N_PERM = 100
     ADD_TEMPORAL = False
     WITH_TEMPORAL_AUG = False
     MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
@@ -187,9 +186,10 @@ def main():
     INCLUDE_TIMEPOINT = False
     DROP_HISTORY = 0.5  # either False or float
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
-    SYMBOLIC_SG = True
+    SYMBOLIC_SG = False
     SPLIT = 'train'
-    views_to_use = (2,)
+    # views_to_use = (2,)
+    views_to_use = (2, 1, 3, 5)
     # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
     if COMPACT_TEMPORAL:
         NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg'

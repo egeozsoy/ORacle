@@ -56,7 +56,7 @@ def scene_graph_to_string(scene_graph, SG_INDICATOR='double', SYMBOLIC_SG_MAP=No
     return out
 
 
-def apply_template(image_paths, scene_graph, image_idx, INCLUDE_TIMEPOINT=True, SYMBOLIC_SG_MAP=None, cot_prompt=None):
+def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, SYMBOLIC_SG_MAP=None, cot_prompt=None):
     # human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
     if INCLUDE_TIMEPOINT:
         human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
@@ -74,12 +74,12 @@ def apply_template(image_paths, scene_graph, image_idx, INCLUDE_TIMEPOINT=True, 
         human_prompt += f'<knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
     else:
         human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
-    id = f'{image_paths[0].parent.parent.stem}/{image_paths[0].stem}'
+    id = f'{image_paths[0].parent.parent.stem}/{timepoint}'
     if cot_prompt is not None:
         value = f'{cot_prompt}\n{scene_graph}'
     else:
         value = scene_graph
-    sample = {'id': id, 'timepoint': image_idx, 'image': [str(image_path.absolute()) for image_path in image_paths] if len(image_paths) > 1 else str(image_paths[0].absolute()),
+    sample = {'id': id, 'timepoint': timepoint, 'image': [str(image_path.absolute()) for image_path in image_paths] if len(image_paths) > 1 else str(image_paths[0].absolute()),
               "conversations": [
                   {
                       "from": "human",
@@ -95,8 +95,8 @@ def apply_template(image_paths, scene_graph, image_idx, INCLUDE_TIMEPOINT=True, 
     return sample
 
 
-def _get_image_json(image_path):
-    with open(image_path.with_suffix('.json'), 'r') as f: return json.load(f)
+def _get_image_json(json_path):
+    with open(json_path.with_suffix('.json'), 'r') as f: return json.load(f)
 
 
 def _sample_negatives(image_json, object_to_valid_attributes, k_negative_entities=3, k_negative_predicates=3):
@@ -157,14 +157,15 @@ def _fake_attributes(FAKE_P, object_to_valid_attributes, name, picked_attributes
     return None
 
 
-def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False, FAKE_ATTRIBUTES=False, FAKE_P=0.2, COT_PROMPTING=False):
+def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False, FAKE_ATTRIBUTES=False, FAKE_P=0.2, COT_PROMPTING=False,
+                                WITHOUT=[]):
     samples = []
-    all_image_paths = list(path.glob('*.jpg'))
-    shuffle(all_image_paths)
-    image_path_to_json = {image_path: _get_image_json(image_path) for image_path in tqdm(all_image_paths, desc='Loading jsons attributes')}
+    all_json_paths = list(path.glob('*.json'))
+    shuffle(all_json_paths)
+    json_path_to_json = {json_path: _get_image_json(json_path) for json_path in tqdm(all_json_paths, desc='Loading jsons attributes')}
     object_to_valid_attributes = defaultdict(list)
-    for image_path in all_image_paths:
-        image_json = image_path_to_json[image_path]
+    for json_path in all_json_paths:
+        image_json = json_path_to_json[json_path]
         for name, descs in image_json['descriptors'].items():
             if name.lower().replace('_', ' ') in EQUIPMENT:
                 # entity
@@ -173,8 +174,8 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                 # predicate
                 name = name[0].lower() + name[1:]
             object_to_valid_attributes[name].append(descs)
-    for image_path in all_image_paths:
-        image_json = image_path_to_json[image_path]
+    for json_path in all_json_paths:
+        image_json = json_path_to_json[json_path]
         negative_descriptors = _sample_negatives(image_json=image_json, object_to_valid_attributes=object_to_valid_attributes, k_negative_entities=3, k_negative_predicates=3)
 
         relations = image_json['sg']
@@ -193,9 +194,24 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
             if 'assistant-surgeon' in obj:
                 obj = 'assistant_surgeon'
             new_relations.append((sub, rel, obj))
+
+        if len(WITHOUT) > 0:  # Do we have a way of knowing if it is a fake drill vs real drill?
+            cont = False
+            for without in WITHOUT:
+                if any([without.lower() in elem[1].lower() for elem in new_relations]) and (without[0].upper() + without[1:]) not in image_json['descriptors']:
+                    cont = True
+                    break
+            if cont:
+                continue
+
         relations = new_relations
 
-        image_paths = [image_path]
+        image_paths = []
+        if len(views_to_use) > 1:
+            for view_idx in views_to_use:
+                image_paths.append(json_path.parent / f'{json_path.stem}_cidx{view_idx}.jpg')
+        else:
+            image_paths.append(json_path.with_suffix('.jpg'))
 
         shuffle(relations)  # order should be random
         if SYMBOLIC_SG:
@@ -350,7 +366,7 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
         else:
             symbolic_sg_map = None
         scene_graph_string = scene_graph_to_string(relations, SG_INDICATOR=SG_INDICATOR, SYMBOLIC_SG_MAP=symbolic_sg_map)
-        sample = apply_template(image_paths, scene_graph_string, image_idx=int(image_path.stem), INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG_MAP=symbolic_sg_map, cot_prompt=cot_prompt)
+        sample = apply_template(image_paths, scene_graph_string, timepoint=int(json_path.stem), INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG_MAP=symbolic_sg_map, cot_prompt=cot_prompt)
         samples.append(sample)
 
     return samples
@@ -370,7 +386,11 @@ def main():
     FAKE_ATTRIBUTES = True
     FAKE_P = 0.5
     COT_PROMPTING = True  # chain of thought prompting
+    WITHOUT = ['hammering', 'drilling', 'sawing']
+    # views_to_use = (2,)
+    views_to_use = (2, 1, 3, 5)
     # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
+    # TODO do multiview
     if COMPACT_TEMPORAL:
         NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg_synthetic'
     elif SYMBOLIC_SG:
@@ -385,6 +405,10 @@ def main():
         NAME += f'_drophistory{DROP_HISTORY}'
     if COT_PROMPTING:
         NAME += '_cot'
+    if len(views_to_use) > 1:
+        NAME += f'_{len(views_to_use)}views'
+    if len(WITHOUT) > 0:
+        NAME += f'_without{"_".join(WITHOUT)}'
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -398,9 +422,9 @@ def main():
         padding_side="right",
         use_fast=False,
     )
-    # TODO synthetic_4D-OR_fullremoved and synthetic_4D-OR_new2
-    samples = generate_finetuning_samples(Path('synthetic_or_generation/synthetic_4D-OR_new'), SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
-                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, COT_PROMPTING=COT_PROMPTING)
+    samples = generate_finetuning_samples(Path('synthetic_or_generation/synthetic_4D-OR_mv') if len(views_to_use) > 1 else Path('synthetic_or_generation/synthetic_4D-OR'), views_to_use=views_to_use,
+                                          SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
+                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, COT_PROMPTING=COT_PROMPTING, WITHOUT=WITHOUT)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -489,8 +513,12 @@ def main():
 
     if SPLIT == 'train' and not ADD_TEMPORAL:
         if SYMBOLIC_SG:
-            with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_{COT_PROMPTING}.json', 'w') as f:
-                json.dump(token_freq, f, indent=4)
+            if len(WITHOUT) > 0:
+                with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_{COT_PROMPTING}_without{"_".join(WITHOUT)}.json', 'w') as f:
+                    json.dump(token_freq, f, indent=4)
+            else:
+                with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_{COT_PROMPTING}.json', 'w') as f:
+                    json.dump(token_freq, f, indent=4)
         else:
             with open(f'data/llava_samples/train_token_freqs_7b_perm_synthetic_removal_{FAKE_P}_{COT_PROMPTING}.json', 'w') as f:
                 json.dump(token_freq, f, indent=4)

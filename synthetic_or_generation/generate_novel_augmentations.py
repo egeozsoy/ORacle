@@ -115,19 +115,25 @@ def _load_gt_role_labels(take_indices):
     return take_frame_to_human_idx_to_name_and_joints
 
 
-def _preprocess_metadata(metadata, entity_crops_path: Path, camera_idx):
+def _preprocess_metadata(metadata, entity_crops_path: Path, view_indices):
     if 'none' in metadata: metadata.pop('none')
     all_entities = set(metadata.keys())
-    camera_entity_crops_path = entity_crops_path / str(camera_idx)
     entity_to_valid_names = {}
-    for entity in all_entities:
-        entity_path = camera_entity_crops_path / entity
-        assert entity_path.exists()
-        entity_to_valid_names[entity] = {elem.name.replace('.png', '') for elem in entity_path.glob('*.png')}
+    for view_idx in view_indices:
+        camera_entity_crops_path = entity_crops_path / str(view_idx)
+        for entity in all_entities:
+            entity_path = camera_entity_crops_path / entity
+            if not entity_path.exists():
+                print(f'Entity {entity} does not exist in view {view_idx}')
+                continue
+            if entity not in entity_to_valid_names:
+                entity_to_valid_names[entity] = {elem.name.replace('.png', '') for elem in entity_path.glob('*.png')}
+            else:
+                entity_to_valid_names[entity] &= {elem.name.replace('.png', '') for elem in entity_path.glob('*.png')}
     for key, values in metadata.items():
         indices_to_remove = []
         for value_idx, value in enumerate(values):
-            if value['image_name'] not in entity_to_valid_names[key] or value['c_idx'] != camera_idx:
+            if value['image_name'] not in entity_to_valid_names[key] or value['c_idx'] not in view_indices:
                 indices_to_remove.append(value_idx)
             metadata[key][value_idx]['entity_triplets'] = sorted([tuple(v) for v in value['entity_triplets']])
         metadata[key] = [v for i, v in enumerate(values) if i not in indices_to_remove]
@@ -161,26 +167,26 @@ def _sample_object_with_descriptor(object_type_to_images, is_instrument, is_equi
 
 
 def init_worker():
-    global object_type_to_images, export_path, take_to_bg, meta_data, entity_crops_path, graphs, role_labels, CAM_IDX, replacement_map  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
-    CAM_IDX = 2
+    global object_type_to_images, export_path, take_to_view_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, replacement_map  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
+    VIEW_INDICES = (2, 1, 3, 5)
     images_dir = Path('synthetic_or_generation/images_sdxl')
     object_type_to_images = defaultdict(list)
 
-    export_path = Path('synthetic_or_generation/synthetic_4D-OR_new2')
+    export_path = Path('synthetic_or_generation/synthetic_4D-OR_mv')
     export_path.mkdir(exist_ok=True, parents=True)
 
     # 1. First fetch the background images
-    take_to_bg = {}
+    take_to_view_to_bg = defaultdict(dict)
     for take_idx in [1, 3, 5, 7, 9, 10]:
-        bg = Image.open(f'synthetic_or_generation/clean_bgs/take_{take_idx}_cam_{CAM_IDX}_clean_bg.jpg')
-        bg = bg.convert('RGBA')
-        take_to_bg[take_idx] = bg
+        for view_idx in VIEW_INDICES:
+            bg = Image.open(f'synthetic_or_generation/clean_bgs/take_{take_idx}_cam_{view_idx}_clean_bg.jpg').convert('RGBA')
+            take_to_view_to_bg[take_idx][view_idx] = bg
 
     # 2. Fetch the metadata, and preprocess it
     entity_crops_path = Path('synthetic_or_generation/entity_crops_all')
     with open(entity_crops_path / 'metadata.json') as f:
         meta_data = json.load(f)
-    _preprocess_metadata(meta_data, entity_crops_path, CAM_IDX)
+    _preprocess_metadata(meta_data, entity_crops_path, VIEW_INDICES)
 
     graphs = _load_gt_scene_graphs_in_prediction_format()
     role_labels = _load_gt_role_labels(TAKE_SPLIT['train'] + TAKE_SPLIT['val'] + TAKE_SPLIT['test'])
@@ -220,7 +226,7 @@ def main_worker(d_idx):
         ref_graph = graphs[ref_scene['idx']]
         roles = role_labels[ref_scene['idx']]
         data = {'sg': ref_graph, 'descriptors': {}, 'replaced_pred': None, 'replaced_entity': None, 'paths': {}}
-        rgb = None
+        view_to_rgb = {}
 
         if instrument_image:
             # locate the left or right hand of the surgeon. Place the instrument image there.
@@ -232,31 +238,38 @@ def main_worker(d_idx):
                 return (False, d_idx)
             # find left or right hand of that entity
             left_or_right = random.choice(['left', 'right'])
-            entity_metadata = [elem for elem in meta_data[staff_with_pred] if elem['image_name'] == ref_scene['idx']][0]
-            entity_depth = entity_metadata['average_depth']
-            # sample the entity image from that corresponding frame to be used as mask on top of the instrument image
-            hand_position = entity_metadata['left_hand'] if left_or_right == 'left' else entity_metadata['right_hand']
-            if hand_position is None:
-                hand_position = entity_metadata['xmax'] - entity_metadata['xmin'], entity_metadata['ymax'] - entity_metadata['ymin']  # default to entity center
-
             root_path = OR_4D_DATA_ROOT_PATH / f'export_holistic_take{ref_take}_processed'
             color_image_path = root_path / 'colorimage'
             with (root_path / 'timestamp_to_pcd_and_frames_list.json').open() as f:
                 timestamp_to_pcd_and_frames_list = json.load(f)
-            color_image_str = timestamp_to_pcd_and_frames_list[int(ref_idx)][1][f'color_{CAM_IDX}']
-            rgb_path = color_image_path / f'camera0{CAM_IDX}_colorimage-{color_image_str}.jpg'
-            if rgb is None:
-                rgb = Image.open(str(rgb_path)).convert("RGBA")
-            # plot the instrument image on top of the rgb image
+
             instrument_image_path = instrument_image.stem
             instrument_image = Image.open(instrument_image).convert('RGBA')
-            # scale the object depending on the depth of the entity. Meaning the further away the entity is, the smaller the object should be.
-            scale_factor = random.randint(200_000, 400_000)
-            object_size = scale_factor / entity_depth
-            instrument_image = instrument_image.resize((int(object_size), int(object_size)))
-
-            # plot so that center of instrument image is at hand_position
-            rgb.paste(instrument_image, (hand_position[0] - instrument_image.width // 2, hand_position[1] - instrument_image.height // 2), instrument_image)
+            instrument_image_paths = []
+            for view_idx in VIEW_INDICES:
+                color_image_str = timestamp_to_pcd_and_frames_list[int(ref_idx)][1][f'color_{view_idx}']
+                rgb_path = color_image_path / f'camera0{view_idx}_colorimage-{color_image_str}.jpg'
+                if view_idx not in view_to_rgb:
+                    rgb = Image.open(str(rgb_path)).convert("RGBA")
+                    view_to_rgb[view_idx] = rgb
+                else:
+                    rgb = view_to_rgb[view_idx]
+                entity_metadata = [elem for elem in meta_data[staff_with_pred] if elem['image_name'] == ref_scene['idx'] and elem['c_idx'] == view_idx]
+                if len(entity_metadata) == 0:
+                    continue
+                entity_metadata = entity_metadata[0]
+                entity_depth = entity_metadata['average_depth']
+                # sample the entity image from that corresponding frame to be used as mask on top of the instrument image
+                hand_position = entity_metadata['left_hand'] if left_or_right == 'left' else entity_metadata['right_hand']
+                if hand_position is None:
+                    hand_position = entity_metadata['xmax'] - entity_metadata['xmin'], entity_metadata['ymax'] - entity_metadata['ymin']  # default to entity center
+                # scale the object depending on the depth of the entity. Meaning the further away the entity is, the smaller the object should be.
+                scale_factor = random.randint(200_000, 400_000)
+                object_size = scale_factor / entity_depth
+                instrument_image = instrument_image.resize((int(object_size), int(object_size)))
+                # plot so that center of instrument image is at hand_position
+                rgb.paste(instrument_image, (hand_position[0] - instrument_image.width // 2, hand_position[1] - instrument_image.height // 2), instrument_image)
+                instrument_image_paths.append(instrument_image_path)
 
             # now correctly update the scene graph
             new_graph = []
@@ -267,49 +280,63 @@ def main_worker(d_idx):
             ref_graph = new_graph
 
             data['descriptors'][replacement_map[instrument_attrs['object_type']]['replace_pred_to']] = instrument_attrs
-            data['paths'][replacement_map[instrument_attrs['object_type']]['replace_pred_to']] = instrument_image_path
+            data['paths'][replacement_map[instrument_attrs['object_type']]['replace_pred_to']] = instrument_image_paths
             data['replaced_pred'] = pred_to_replace
 
         if equipment_image:
             # find the entity with that pred
             entity_to_replace = random.choice(list(ref_scene['suitable_entities']))
             # sample the entity image from that corresponding frame to be used as mask on top of the instrument image
-            entity_metadata = [elem for elem in meta_data[entity_to_replace] if elem['image_name'] == ref_scene['idx']][0]
-            entity_depth = entity_metadata['average_depth']
             root_path = OR_4D_DATA_ROOT_PATH / f'export_holistic_take{ref_take}_processed'
             color_image_path = root_path / 'colorimage'
             with (root_path / 'timestamp_to_pcd_and_frames_list.json').open() as f:
                 timestamp_to_pcd_and_frames_list = json.load(f)
-            color_image_str = timestamp_to_pcd_and_frames_list[int(ref_idx)][1][f'color_{CAM_IDX}']
-            rgb_path = color_image_path / f'camera0{CAM_IDX}_colorimage-{color_image_str}.jpg'
-            if rgb is None:
-                rgb = Image.open(str(rgb_path)).convert("RGBA")
-            # 1) Clean where the current entity is. Use clean bg for this.
-            entity_mask = Image.open(entity_crops_path / f'{CAM_IDX}/{entity_to_replace}/{ref_scene["idx"]}.png')
-            # Mask cleanbg using entity mask
-            clean_bg = deepcopy(take_to_bg[int(ref_take)]).convert('RGBA')
-            clean_bg = np.asarray(clean_bg).copy()
-            entity_mask = np.asarray(entity_mask)[:, :, 3] < 128
-            clean_bg[entity_mask] = 0
-            clean_bg = Image.fromarray(clean_bg)
-            # finish the cleaning by pasting clean_bg on top of rgb
-            rgb.paste(clean_bg, (0, 0), clean_bg)
-            # 2) Start adding the new equipment. But mask it again using entity mask to make sure it does not exceed the entity boundaries.
+
             equipment_image_path = equipment_image.stem
             equipment_image = Image.open(equipment_image).convert('RGBA')
-            scale_factor = random.randint(800_000, 1_400_000)
-            object_size = scale_factor / entity_depth
-            equipment_image = equipment_image.resize((int(object_size), int(object_size)))
-            # plot equipment image into an empty canvas with the same size of the entity mask
-            equipment_image_canvas = Image.new('RGBA', (entity_mask.shape[1], entity_mask.shape[0]))
-            equipment_image_canvas.paste(equipment_image, (entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - equipment_image.width // 2,
-                                                           entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - equipment_image.height // 2), equipment_image)
-            # mask the equipment image canvas using entity mask
-            equipment_image_canvas = np.asarray(equipment_image_canvas).copy()
-            equipment_image_canvas[entity_mask] = 0
-            equipment_image_canvas = Image.fromarray(equipment_image_canvas)
-            # now plot the equipment image canvas on top of the rgb image
-            rgb.paste(equipment_image_canvas, (0, 0), equipment_image_canvas)
+            equipment_image_paths = []
+            for view_idx in VIEW_INDICES:
+                color_image_str = timestamp_to_pcd_and_frames_list[int(ref_idx)][1][f'color_{view_idx}']
+                rgb_path = color_image_path / f'camera0{view_idx}_colorimage-{color_image_str}.jpg'
+                if view_idx not in view_to_rgb:
+                    rgb = Image.open(str(rgb_path)).convert("RGBA")
+                    view_to_rgb[view_idx] = rgb
+                else:
+                    rgb = view_to_rgb[view_idx]
+
+                entity_metadata = [elem for elem in meta_data[entity_to_replace] if elem['image_name'] == ref_scene['idx'] and elem['c_idx'] == view_idx]
+                if len(entity_metadata) == 0:
+                    continue
+                entity_metadata = entity_metadata[0]
+                entity_depth = entity_metadata['average_depth']
+
+                # 1) Clean where the current entity is. Use clean bg for this.
+                entity_mask = Image.open(entity_crops_path / f'{view_idx}/{entity_to_replace}/{ref_scene["idx"]}.png')
+                # Mask cleanbg using entity mask
+                clean_bg = deepcopy(take_to_view_to_bg[int(ref_take)][view_idx]).convert('RGBA')
+                clean_bg = np.asarray(clean_bg).copy()
+                entity_mask = np.asarray(entity_mask)[:, :, 3] < 128
+                clean_bg[entity_mask] = 0
+                clean_bg = Image.fromarray(clean_bg)
+                # finish the cleaning by pasting clean_bg on top of rgb
+                rgb.paste(clean_bg, (0, 0), clean_bg)
+                # 2) Start adding the new equipment. But mask it again using entity mask to make sure it does not exceed the entity boundaries.
+
+                scale_factor = random.randint(800_000, 1_400_000)
+                object_size = scale_factor / entity_depth
+                equipment_image = equipment_image.resize((int(object_size), int(object_size)))
+                # plot equipment image into an empty canvas with the same size of the entity mask
+                equipment_image_canvas = Image.new('RGBA', (entity_mask.shape[1], entity_mask.shape[0]))
+                equipment_image_canvas.paste(equipment_image, (entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - equipment_image.width // 2,
+                                                               entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - equipment_image.height // 2), equipment_image)
+                # mask the equipment image canvas using entity mask
+                equipment_image_canvas = np.asarray(equipment_image_canvas).copy()
+                equipment_image_canvas[entity_mask] = 0
+                equipment_image_canvas = Image.fromarray(equipment_image_canvas)
+                # now plot the equipment image canvas on top of the rgb image
+                rgb.paste(equipment_image_canvas, (0, 0), equipment_image_canvas)
+                equipment_image_paths.append(equipment_image_path)
+
             # now correctly update the scene graph
             new_graph = []
             for sub, rel, obj in ref_graph:
@@ -320,7 +347,7 @@ def main_worker(d_idx):
                 new_graph.append((sub, rel, obj))
             ref_graph = new_graph
             data['descriptors'][replacement_map[equipment_attrs['object_type']]['replace_entity_to']] = equipment_attrs
-            data['paths'][replacement_map[equipment_attrs['object_type']]['replace_entity_to']] = equipment_image_path
+            data['paths'][replacement_map[equipment_attrs['object_type']]['replace_entity_to']] = equipment_image_paths
             data['replaced_entity'] = entity_to_replace
 
         # apply roles to the scene graph
@@ -337,8 +364,9 @@ def main_worker(d_idx):
 
         # 3. Now we have the scene graph, and the image. We need to save them.
         # 3.1. Save the image
-        rgb = rgb.convert('RGB')
-        rgb.save(export_path / f'{d_idx}.jpg')
+        for view_idx, rgb in view_to_rgb.items():
+            rgb = rgb.convert('RGB')
+            rgb.save(export_path / f'{d_idx}_cidx{view_idx}.jpg')
         # 3.2. Save the scene graph and descriptors
         with open(export_path / f'{d_idx}.json', 'w') as f:
             json.dump(data, f)
