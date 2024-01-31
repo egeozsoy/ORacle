@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector, build_image_pooler
 
-from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, VIS_DESCRIPTOR_TOKEN_INDEX
 import matplotlib.pyplot as plt
 
 class LlavaMetaModel:
@@ -186,7 +186,7 @@ class LlavaMetaForCausalLM(ABC):
         return self.get_model().get_image_pooler()
 
     def prepare_inputs_labels_for_multimodal(
-        self, input_ids, position_ids, attention_mask, past_key_values, labels, images
+        self, input_ids, position_ids, attention_mask, past_key_values, labels, images, vis_descriptor_embs
     ):
         vision_tower = self.get_vision_tower()
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
@@ -267,6 +267,7 @@ class LlavaMetaForCausalLM(ABC):
         cur_image_idx = 0
         for batch_idx, cur_input_ids in enumerate(input_ids):
             num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum()
+            num_vis_descriptors = (cur_input_ids == VIS_DESCRIPTOR_TOKEN_INDEX).sum()
             if num_images == 0:
                 cur_image_features = image_features[cur_image_idx]
                 cur_input_embeds_1 = self.get_model().embed_tokens(cur_input_ids)
@@ -276,7 +277,7 @@ class LlavaMetaForCausalLM(ABC):
                 cur_image_idx += 1
                 continue
 
-            image_token_indices = [-1] + torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0].tolist() + [cur_input_ids.shape[0]]
+            image_token_indices = [-1] + torch.where((cur_input_ids == IMAGE_TOKEN_INDEX) | (cur_input_ids == VIS_DESCRIPTOR_TOKEN_INDEX))[0].tolist() + [cur_input_ids.shape[0]] #first one is image, rest are vis descriptors
             cur_input_ids_noim = []
             cur_labels = labels[batch_idx]
             cur_labels_noim = []
@@ -297,6 +298,20 @@ class LlavaMetaForCausalLM(ABC):
                     cur_image_idx += 1
                     cur_new_input_embeds.append(cur_image_features)
                     cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=cur_labels.device, dtype=cur_labels.dtype))
+
+            # add visual descriptors in order
+            # image loop already added first text part after the <image> token, so we can directly add the first vis descriptor + the text part after it
+            if vis_descriptor_embs is not None:
+                if type(vis_descriptor_embs[0]) is not list: #batchsize 1
+                    vis_descriptor_embs = [vis_descriptor_embs]
+                for j in range(num_vis_descriptors):
+                    cur_descriptor_features = vis_descriptor_embs[batch_idx][j].to(self.device)
+                    if len(cur_descriptor_features.shape) == 1:
+                        cur_descriptor_features = cur_descriptor_features.unsqueeze(0)
+                    cur_new_input_embeds.append(cur_descriptor_features)
+                    cur_new_labels.append(torch.full((cur_descriptor_features.shape[0],), IGNORE_INDEX, device=cur_labels.device, dtype=cur_labels.dtype))
+                    cur_new_input_embeds.append(cur_input_embeds_no_im[num_images + j + 1])
+                    cur_new_labels.append(cur_labels_noim[num_images + j + 1])
 
             cur_new_input_embeds = torch.cat(cur_new_input_embeds)
             cur_new_labels = torch.cat(cur_new_labels)

@@ -13,7 +13,7 @@ from PIL import Image
 from sklearn.metrics import classification_report
 from tqdm import tqdm
 
-from LLaVA.llava.constants import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_END_TOKEN, IMAGE_TOKEN_INDEX, DEFAULT_IM_START_TOKEN
+from LLaVA.llava.constants import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_END_TOKEN, IMAGE_TOKEN_INDEX, DEFAULT_IM_START_TOKEN, VIS_DESCRIPTOR_TOKEN
 from LLaVA.llava.conversation import conv_templates, SeparatorStyle, default_conversation
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token, KeywordsStoppingCriteria
 from LLaVA.llava.model.builder import load_pretrained_model
@@ -62,6 +62,7 @@ class OracleWrapper:
         batchsize = len(batch)
         all_images = []
         all_prompts = []
+        all_vis_descriptor_embs = []
         for elem in batch:
             conv = default_conversation.copy()
 
@@ -85,6 +86,12 @@ class OracleWrapper:
                 inp = 'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: primary operator in surgery, handles critical tasks. B: supports head surgeon, assists in surgical tasks. C: coordinates OR activities and tools. D: assists in surgical prep and recovery. E: administers anesthesia, monitors patient. F: undergoes surgical procedure. G: instrument table, blue, large, rectangular, matte. H: operating table, black, large, rectangular, rubber. I: secondary table, gray, large, rectangular, metal. J: anesthesia equipment, white, large, irregular, matte. K: instrument, handheld. α: collaboration between staff. β: use of a tool: black, handheld, straight, metal, surgical bone cement gun. γ: use of a tool: white, handheld, irregular, sanitization equipment. δ: proximity of medical staff or equipment to each other in OR. ε: use of a tool: white, small, straight, plastic, surgical scalpel. ζ: use of a tool: orange, handheld, L-shape, plastic, surgical drill. η: use of a tool: brown, handheld, T-shape, metal, surgical hammer. θ: grasping surgical instruments. ι: patient positioned on the operating table. κ: handling of medical objects like operating tables or anesthesia machines. λ: includes draping and sterilization. μ: use of a tool: green, handheld, round, plastic, surgical bone saw. ν: use of a tool: gray, small, straight, metal, surgical scissors. ξ: physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
             else:
                 inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
+
+            if 'USE_VIS_DESC' in self.config and self.config['USE_VIS_DESC'] == True:
+                # order of img_patches: anesthesia machine, cementing, cutting, drilling, hammering, sawing, suturing
+                inp = f'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: primary operator in surgery, handles critical tasks. B: supports head surgeon, assists in surgical tasks. C: coordinates OR activities and tools. D: assists in surgical prep and recovery. E: administers anesthesia, monitors patient. F: undergoes surgical procedure. G: instrument table, blue, large, rectangular, matte. H: operating table, black, large, rectangular, rubber. I: secondary table, gray, large, rectangular, metal. J: {VIS_DESCRIPTOR_TOKEN}. K: Instrument, handheld. α: collaboration between staff. β: use of a tool: {VIS_DESCRIPTOR_TOKEN}. γ: use of a tool: white, handheld, irregular, sanitization equipment. δ: proximity of medical staff or equipment to each other in OR. ε: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ζ: use of a tool: {VIS_DESCRIPTOR_TOKEN}. η: use of a tool: {VIS_DESCRIPTOR_TOKEN}. θ: grasping surgical instruments. ι: patient positioned on the operating table. κ: handling of medical objects like operating tables or anesthesia machines. λ: includes draping and sterilization. μ: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ν: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ξ: physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
+                all_vis_descriptor_embs.append(elem['vis_descriptor_embs'])
+
             # first message
             if self.model.config.mm_use_im_start_end:
                 inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
@@ -144,14 +151,15 @@ class OracleWrapper:
                 do_sample=False,
                 use_cache=True,
                 max_new_tokens=300,
-                stopping_criteria=[stopping_criteria]
+                stopping_criteria=[stopping_criteria],
+                vis_descriptor_embs=all_vis_descriptor_embs if 'USE_VIS_DESC' in self.config and self.config['USE_VIS_DESC'] else None
             )
         if batchsize == 1:
             outputs = [self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()]
         else:
             outputs = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1]:].tolist(), skip_special_tokens=True)
 
-        if '_symbolic' in self.model_name:
+        if '_symbolic' in self.model_name or self.config['USE_VIS_DESC']:
             # parse outputs back to head surgeon etc..
             symbolic_parsed = []
             # TODO this might need updating

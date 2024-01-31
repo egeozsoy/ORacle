@@ -121,9 +121,31 @@ class ModelWorker:
     @torch.inference_mode()
     def generate_stream(self, params):
         tokenizer, model, image_processor = self.tokenizer, self.model, self.image_processor
-
+        model.to(torch.bfloat16)
         prompt = params["prompt"]
+        if "DES:" in prompt:
+            vis_knowledge_paths = prompt.split("DES:")[1].split("DES_END")[0].split(",")
+            prompt = prompt.split("DES:")[0] + prompt.split("DES_END")[1]
+
+        else:
+            vis_knowledge_paths = [
+                'data/original_crops/anesthesia equipment_take1.pt',
+                'data/original_crops/cementing_take1.pt',
+                'data/original_crops/cutting_take1.pt',
+                'data/original_crops/drilling_take1.pt',
+                'data/original_crops/hammering_take1.pt',
+                'data/original_crops/sawing_take1.pt',
+                'data/original_crops/suturing_take1.pt'
+            ]
+
         print(prompt)
+
+        vis_descriptor_embs = []
+        for vis_knowledge_path in vis_knowledge_paths:
+            vis_knowledge_path = f'/home/guests/chantal_pellegrini/Oracle/{vis_knowledge_path}'
+            vis_descriptor_emb = torch.load(vis_knowledge_path, map_location='cuda')
+            vis_descriptor_embs.append(vis_descriptor_emb.bfloat16())
+
         ori_prompt = prompt
         images = params.get("images", None)
         num_image_tokens = 0
@@ -136,9 +158,9 @@ class ModelWorker:
                 images = process_images(images, image_processor, model.config)
 
                 if type(images) is list:
-                    images = [image.to(self.model.device, dtype=torch.float16) for image in images]
+                    images = [image.to(self.model.device, dtype=torch.bfloat16) for image in images]
                 else:
-                    images = images.to(self.model.device, dtype=torch.float16)
+                    images = images.to(self.model.device, dtype=torch.bfloat16)
 
                 replace_token = DEFAULT_IMAGE_TOKEN
                 if getattr(self.model.config, 'mm_use_im_start_end', False):
@@ -148,7 +170,7 @@ class ModelWorker:
                 num_image_tokens = prompt.count(replace_token) * model.get_vision_tower().num_patches
             else:
                 images = None
-            image_args = {"images": images}
+            image_args = {"images": images, "vis_descriptor_embs": vis_descriptor_embs}
         else:
             images = None
             image_args = {}
@@ -187,7 +209,7 @@ class ModelWorker:
         generated_text = ori_prompt
         # TODO hardcoding this is ugly
         replace_map = {'A': 'head surgeon', 'B': 'assistant surgeon', 'C': 'circulator', 'D': 'nurse', 'E': 'anaesthetist', 'F': 'patient', 'G': 'instrument table', 'H': 'operating table',
-                       'I': 'secondary table', 'J': 'anesthesia equipment', 'K': 'instrument', 'L': 'Mako', 'α': 'assisting', 'β': 'cementing', 'γ': 'cleaning', 'δ': 'closeTo', 'ε': 'cutting',
+                       'I': 'secondary table', 'J': 'anesthesia equipment', 'K': 'instrument', 'L': 'robotic arm', 'α': 'assisting', 'β': 'cementing', 'γ': 'cleaning', 'δ': 'closeTo', 'ε': 'cutting',
                        'ζ': 'drilling',
                        'η': 'hammering', 'θ': 'holding', 'ι': 'lyingOn', 'κ': 'manipulating', 'λ': 'preparing', 'μ': 'sawing', 'ν': 'suturing', 'ξ': 'touching', 'ο': 'robotic sawing'}
         # we use regex to replace all occurences of the symbols

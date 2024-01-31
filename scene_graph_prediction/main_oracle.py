@@ -51,7 +51,7 @@ def main():
     args = parser.parse_args()
     pl.seed_everything(42, workers=True)
     config = config_loader(args.config)
-    mode = 'eval_all'  # can be evaluate/infer/eval_all
+    mode = 'evaluate'  # can be evaluate/infer/eval_all
     shuffle = True
     batch_size = 8
     if 'temporality' in config and config['temporality'] == 'PRED':

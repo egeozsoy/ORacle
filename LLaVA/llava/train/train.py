@@ -63,6 +63,7 @@ class ModelArguments:
     mm_use_im_patch_token: bool = field(default=True)
     mm_vision_select_feature: Optional[str] = field(default="patch")
     mv_type: Optional[str] = field(default='concat')
+    use_vis_descriptors: bool = field(default=False)
 
 
 @dataclass
@@ -866,6 +867,13 @@ class LazySupervisedDataset(Dataset):
         # image exist in the data
         if 'image' in self.list_data_dict[i]:
             data_dict['images'] = image
+        if 'vis_knowledge_paths' in self.list_data_dict[i]:
+            vis_descriptor_embs = []
+            for vis_knowledge_path in self.list_data_dict[i]['vis_knowledge_paths']:
+                vis_knowledge_path = f'/home/guests/chantal_pellegrini/Oracle/{vis_knowledge_path}'
+                emb = torch.load(vis_knowledge_path, map_location='cpu')
+                vis_descriptor_embs.append(emb)
+            data_dict['vis_descriptor_embs'] = vis_descriptor_embs
         elif self.data_args.is_multimodal:
             # image does not exist in the data, but the model is multimodal
             crop_size = self.data_args.image_processor.crop_size
@@ -903,6 +911,10 @@ class DataCollatorForSupervisedDataset(object):
                 batch['images'] = torch.stack(images)
             else:
                 batch['images'] = images
+
+        if 'vis_descriptor_embs' in instances[0]:
+            vis_descriptor_embs = [instance['vis_descriptor_embs'] for instance in instances]
+            batch['vis_descriptor_embs'] = vis_descriptor_embs
 
         return batch
 
@@ -998,6 +1010,7 @@ def train():
                 cache_dir=training_args.cache_dir,
                 **bnb_model_from_pretrained_args
             )
+
     else:
         model = transformers.LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
@@ -1057,6 +1070,7 @@ def train():
             padding_side="right",
             use_fast=False,
         )
+
         # entities =  ["head surgeon", "assistant surgeon", "circulator", "nurse", "anaesthetist", "patient", "instrument table", "operating table", "secondary table", "anesthesia equipment", "instrument"]
         # predicates = ["assisting", "cementing", "cleaning", "closeTo", "cutting", "drilling", "hammering", "holding", "lyingOn", "manipulating", "preparing", "sawing", "suturing", "touching"]
         #
