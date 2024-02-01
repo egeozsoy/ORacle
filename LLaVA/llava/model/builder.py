@@ -35,12 +35,12 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
         kwargs['load_in_4bit'] = True
         kwargs['quantization_config'] = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type='nf4'
         )
     else:
-        kwargs['torch_dtype'] = torch.float16
+        kwargs['torch_dtype'] = torch.bfloat16
 
     if 'llava' in model_name.lower():
         # Load LLaVA model
@@ -104,7 +104,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                 model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
 
             mm_projector_weights = torch.load(os.path.join(model_path, 'mm_projector.bin'), map_location='cpu')
-            mm_projector_weights = {k: v.to(torch.float16) for k, v in mm_projector_weights.items()}
+            mm_projector_weights = {k: v.to(torch.bfloat16) for k, v in mm_projector_weights.items()}
             model.load_state_dict(mm_projector_weights, strict=False)
         else:
             if 'mpt' in model_name.lower():
@@ -126,7 +126,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             print(f"Merging weights")
             model = model.merge_and_unload()
             print('Convert to FP16...')
-            model.to(torch.float16)
+            model.to(torch.bfloat16)
         else:
             use_fast = False
             if 'mpt' in model_name.lower():
@@ -150,7 +150,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
         vision_tower = model.get_vision_tower()
         if not vision_tower.is_loaded:
             vision_tower.load_model()
-        vision_tower.to(device=device, dtype=torch.float16)
+        vision_tower.to(device=device, dtype=torch.bfloat16)
         image_processor = vision_tower.image_processor
         # if non_lora_trainables contains something about vision_tower, load it
         if non_lora_trainables is not None and any(k.startswith('model.vision_tower.') for k in non_lora_trainables):
@@ -164,7 +164,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             # weight difference sum([torch.norm(value-vision_tower.state_dict()[key].cpu())  for key,value in new_vision_tower_state_dict.items()])
 
         image_pooler = model.get_image_pooler()
-        image_pooler.to(device=device, dtype=torch.float16)
+        image_pooler.to(device=device, dtype=torch.bfloat16)
         if non_lora_trainables is not None and any(k.startswith('model.image_pooler.') for k in non_lora_trainables):
             new_image_pooler_state_dict = {}
             for k, v in non_lora_trainables.items():  # we need remapping, because state_dict from model is always like model.vision_tower. It should be vision_tower.

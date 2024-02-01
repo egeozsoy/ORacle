@@ -72,9 +72,9 @@ class OracleWrapper:
             # Similar operation in model_worker.py
             image_tensor = process_images(images, self.image_processor, self.model.config)
             if type(image_tensor) is list:
-                image_tensor = [image.to(self.model.device, dtype=torch.float16) for image in image_tensor]
+                image_tensor = [image.to(self.model.device, dtype=torch.bfloat16) for image in image_tensor]
             else:
-                image_tensor = image_tensor.to(self.model.device, dtype=torch.float16)
+                image_tensor = image_tensor.to(self.model.device, dtype=torch.bfloat16)
             all_images.append(image_tensor)
 
             # TODO this would need adapting if the prompt changes
@@ -90,7 +90,8 @@ class OracleWrapper:
             if 'USE_VIS_DESC' in self.config and self.config['USE_VIS_DESC'] == True:
                 # order of img_patches: anesthesia machine, cementing, cutting, drilling, hammering, sawing, suturing
                 inp = f'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: primary operator in surgery, handles critical tasks. B: supports head surgeon, assists in surgical tasks. C: coordinates OR activities and tools. D: assists in surgical prep and recovery. E: administers anesthesia, monitors patient. F: undergoes surgical procedure. G: instrument table, blue, large, rectangular, matte. H: operating table, black, large, rectangular, rubber. I: secondary table, gray, large, rectangular, metal. J: {VIS_DESCRIPTOR_TOKEN}. K: Instrument, handheld. α: collaboration between staff. β: use of a tool: {VIS_DESCRIPTOR_TOKEN}. γ: use of a tool: white, handheld, irregular, sanitization equipment. δ: proximity of medical staff or equipment to each other in OR. ε: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ζ: use of a tool: {VIS_DESCRIPTOR_TOKEN}. η: use of a tool: {VIS_DESCRIPTOR_TOKEN}. θ: grasping surgical instruments. ι: patient positioned on the operating table. κ: handling of medical objects like operating tables or anesthesia machines. λ: includes draping and sterilization. μ: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ν: use of a tool: {VIS_DESCRIPTOR_TOKEN}. ξ: physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
-                all_vis_descriptor_embs.append(elem['vis_descriptor_embs'])
+                vis_desc = [des.to(self.model.device, dtype=torch.bfloat16) for des in elem['vis_descriptor_embs']]
+                all_vis_descriptor_embs.append(vis_desc)
 
             # first message
             if self.model.config.mm_use_im_start_end:
