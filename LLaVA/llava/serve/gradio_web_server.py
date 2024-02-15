@@ -247,7 +247,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, request:
             if chunk:
                 data = json.loads(chunk.decode())
                 if data["error_code"] == 0:
-                    output = data["text"][len(prompt):].strip()
+                    output = data["text"].split('ASSISTANT:')[-1].strip()
                     state.messages[-1][-1] = output + "▌"
                     yield (state, state.to_gradio_chatbot()) + (disable_btn,) * 5
                 else:

@@ -867,6 +867,11 @@ class LazySupervisedDataset(Dataset):
         # image exist in the data
         if 'image' in self.list_data_dict[i]:
             data_dict['images'] = image
+        elif self.data_args.is_multimodal:
+            # image does not exist in the data, but the model is multimodal
+            crop_size = self.data_args.image_processor.crop_size
+            data_dict['images'] = torch.zeros(3, crop_size['height'], crop_size['width'])
+
         if 'vis_knowledge_paths' in self.list_data_dict[i]:
             vis_descriptor_embs = []
             for vis_knowledge_path in self.list_data_dict[i]['vis_knowledge_paths']:
@@ -874,10 +879,7 @@ class LazySupervisedDataset(Dataset):
                 emb = torch.load(vis_knowledge_path, map_location='cpu')
                 vis_descriptor_embs.append(emb)
             data_dict['vis_descriptor_embs'] = vis_descriptor_embs
-        elif self.data_args.is_multimodal:
-            # image does not exist in the data, but the model is multimodal
-            crop_size = self.data_args.image_processor.crop_size
-            data_dict['images'] = torch.zeros(3, crop_size['height'], crop_size['width'])
+
         return data_dict
 
 
