@@ -110,7 +110,7 @@ def parse_llava_sg(llava_sg):
     return triplets
 
 
-def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='all', COMPACT_TEMPORAL=False, INCLUDE_TIMEPOINTS=True, DROP_HISTORY=False):
+def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='all', INCLUDE_TIMEPOINTS=True, DROP_HISTORY=False):
     '''
     Temporal style can be all, long, short, longshort
     '''
@@ -118,21 +118,12 @@ def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_ST
     def _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint):
         rel_timepoint = current_timepoint - timepoint
         if rel_timepoint == last_reltimepoint:  # add without timepoint
-            if COMPACT_TEMPORAL:
-                m_str = f'{pred}; '
+            m_str = f'{sub},{obj},{pred}; '
+        else:
+            if INCLUDE_TIMEPOINTS:
+                m_str = f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
             else:
                 m_str = f'{sub},{obj},{pred}; '
-        else:
-            if COMPACT_TEMPORAL:
-                if INCLUDE_TIMEPOINTS:
-                    m_str = f'T-{rel_timepoint}: {pred}; '
-                else:
-                    m_str = f'{pred}; '
-            else:
-                if INCLUDE_TIMEPOINTS:
-                    m_str = f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-                else:
-                    m_str = f'{sub},{obj},{pred}; '
             last_reltimepoint = rel_timepoint
         return m_str, last_reltimepoint
 

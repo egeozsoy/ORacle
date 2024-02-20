@@ -139,13 +139,22 @@ def _preprocess_metadata(metadata, entity_crops_path: Path, view_indices):
         metadata[key] = [v for i, v in enumerate(values) if i not in indices_to_remove]
 
 
-def _sample_suitable_scene(graphs, entities_needed, predicates_needed):
+def _sample_suitable_scene(graphs, entities_needed, predicates_needed, WITHOUT=None):
     suitable_scenes = []
     for idx, graph in graphs.items():
         entities = {elem[0] for elem in graph} | {elem[2] for elem in graph}
         predicates = {elem[1] for elem in graph if elem[2] == 'Patient'}
         # remove any predicate that is used multiple times in the scene
         predicates = {elem for elem in predicates if len([elem2 for elem2 in graph if elem2[1] == elem]) == 1}
+
+        if WITHOUT is not None and len(WITHOUT) > 0:
+            forbidden = False
+            for without in WITHOUT:
+                if any([without.lower() in elem[1].lower() for elem in graph]):
+                    forbidden = True
+                    break
+            if forbidden:
+                continue
 
         # if at least one entity from entities_needed is in entities and at least one predicate from predicates_needed is in predicates then add to suitable_scenes
         if (len(entities_needed & entities) > 0 or len(entities_needed) == 0) and (len(predicates_needed & predicates) > 0 or len(predicates_needed) == 0):
@@ -167,12 +176,18 @@ def _sample_object_with_descriptor(object_type_to_images, is_instrument, is_equi
 
 
 def init_worker():
-    global object_type_to_images, export_path, take_to_view_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, replacement_map  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
+    global object_type_to_images, export_path, take_to_view_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, replacement_map, WITHOUT  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
     VIEW_INDICES = (2, 1, 3, 5)
     images_dir = Path('synthetic_or_generation/images_sdxl')
     object_type_to_images = defaultdict(list)
+    WITHOUT = ['drilling']
 
-    export_path = Path('synthetic_or_generation/synthetic_4D-OR_mv')
+    print(f'WITHOUT: {WITHOUT}')
+
+    if len(WITHOUT) == 0:
+        export_path = Path('synthetic_or_generation/synthetic_4D-OR_mv')
+    else:
+        export_path = Path(f'synthetic_or_generation/synthetic_4D-OR_mv_without{"_".join(WITHOUT)}')
     export_path.mkdir(exist_ok=True, parents=True)
 
     # 1. First fetch the background images
@@ -221,7 +236,7 @@ def main_worker(d_idx):
         if equipment_image:
             entities_needed.update(replacement_map[equipment_attrs['object_type']]['replace_entity_from'])
 
-        ref_scene = _sample_suitable_scene(graphs, entities_needed, predicates_needed)
+        ref_scene = _sample_suitable_scene(graphs, entities_needed, predicates_needed, WITHOUT)
         ref_take, ref_idx = ref_scene['idx'].split('_')
         ref_graph = graphs[ref_scene['idx']]
         roles = role_labels[ref_scene['idx']]
@@ -308,8 +323,7 @@ def main_worker(d_idx):
                 if len(entity_metadata) == 0:
                     continue
                 entity_metadata = entity_metadata[0]
-                entity_depth = entity_metadata['average_depth']
-
+                entity_depth = entity_metadata['average_depth'] if entity_metadata['average_depth'] is not None else 5000
                 # 1) Clean where the current entity is. Use clean bg for this.
                 entity_mask = Image.open(entity_crops_path / f'{view_idx}/{entity_to_replace}/{ref_scene["idx"]}.png')
                 # Mask cleanbg using entity mask

@@ -867,6 +867,10 @@ class LazySupervisedDataset(Dataset):
         # image exist in the data
         if 'image' in self.list_data_dict[i]:
             data_dict['images'] = image
+        elif self.data_args.is_multimodal:
+            # image does not exist in the data, but the model is multimodal
+            crop_size = self.data_args.image_processor.crop_size
+            data_dict['images'] = torch.zeros(3, crop_size['height'], crop_size['width'])
         if 'vis_knowledge_paths' in self.list_data_dict[i]:
             vis_descriptor_embs = []
             for vis_knowledge_path in self.list_data_dict[i]['vis_knowledge_paths']:
@@ -874,10 +878,6 @@ class LazySupervisedDataset(Dataset):
                 emb = torch.load(vis_knowledge_path, map_location='cpu')
                 vis_descriptor_embs.append(emb)
             data_dict['vis_descriptor_embs'] = vis_descriptor_embs
-        elif self.data_args.is_multimodal:
-            # image does not exist in the data, but the model is multimodal
-            crop_size = self.data_args.image_processor.crop_size
-            data_dict['images'] = torch.zeros(3, crop_size['height'], crop_size['width'])
         return data_dict
 
 
@@ -1010,7 +1010,6 @@ def train():
                 cache_dir=training_args.cache_dir,
                 **bnb_model_from_pretrained_args
             )
-
     else:
         model = transformers.LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
@@ -1070,7 +1069,6 @@ def train():
             padding_side="right",
             use_fast=False,
         )
-
         # entities =  ["head surgeon", "assistant surgeon", "circulator", "nurse", "anaesthetist", "patient", "instrument table", "operating table", "secondary table", "anesthesia equipment", "instrument"]
         # predicates = ["assisting", "cementing", "cleaning", "closeTo", "cutting", "drilling", "hammering", "holding", "lyingOn", "manipulating", "preparing", "sawing", "suturing", "touching"]
         #
@@ -1122,7 +1120,7 @@ def train():
             for p in model.get_model().mm_projector.parameters():
                 p.requires_grad = False
 
-        # reinitialize image_pooler # TODO is this necesary?
+        # reinitialize image_pooler
         model.get_model().image_pooler.bert = model.get_model().image_pooler.bert.apply(model.get_model().image_pooler.bert._init_weights)
 
         if training_args.bits in [4, 8]:

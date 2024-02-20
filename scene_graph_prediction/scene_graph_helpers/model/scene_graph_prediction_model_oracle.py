@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 from collections import defaultdict
+from copy import deepcopy
 from pathlib import Path
 
 import torch
@@ -17,7 +18,7 @@ from LLaVA.llava.constants import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_END_TOKEN, IMA
 from LLaVA.llava.conversation import conv_templates, SeparatorStyle, default_conversation
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token, KeywordsStoppingCriteria
 from LLaVA.llava.model.builder import load_pretrained_model
-from LLaVA.llava.utils import disable_torch_init
+
 from scene_graph_prediction.llava_helpers.scene_graph_converters import llava_sg_to_surgery_sg, surgery_sg_to_memory_str
 from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import map_scene_graph_name_to_vocab_idx, map_vocab_idx_to_scene_graph_name, reversed_role_synonyms
 
@@ -64,7 +65,7 @@ class OracleWrapper:
         all_prompts = []
         all_vis_descriptor_embs = []
         for elem in batch:
-            conv = default_conversation.copy()
+            conv = deepcopy(default_conversation)
 
             images = []
             for cam_idx in self.config['CAMERAS']:
@@ -81,7 +82,7 @@ class OracleWrapper:
             # inp = "Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
             # inp = "Describe this image at timepoint T using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]."
             # inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
-            if '_symbolic' in self.model_name:  # TODO this shall not be hardcoded :D
+            if '_symbolic' in self.model_name:
                 # inp = 'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: Primary operator in surgery, handles critical tasks. B: Supports head surgeon, assists in surgical tasks. C: Coordinates OR activities and tools. D: Assists in surgical prep and recovery. E: Administers anesthesia, monitors patient. F: Undergoes surgical procedure. G: Metallic object sometimes covered with sheets. Holds surgical instruments. H: Central table in OR for patient. I: Holds additional surgical supplies, auxiliary to instrument table. J: Contains devices for anesthesia administration. K: Tools for performing surgical tasks. α: Collaboration between staff. β: Process of affixing knee implants. γ: Sanitization of OR environment and equipment. δ: Proximity of medical staff or equipment to each other in OR. ε: use of scalpel for incisions on patient. ζ: Utilizing an orange drill in surgery. η: use of a hammer with wooden holder and gray head in surgery. θ: Grasping surgical instruments. ι: Patient positioned on the operating table. κ: Handling of medical objects like operating tables or anesthesia machines. λ: Includes draping and sterilization. μ: use of a green/gray saw for surgical procedures on patient. ν: Stitching using medical scissors. ξ: Physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
                 inp = 'Entities: [A, B, C, D, E, F, G, H, I, J, K]. Predicates: [α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ]. <knowledge_start> A: primary operator in surgery, handles critical tasks. B: supports head surgeon, assists in surgical tasks. C: coordinates OR activities and tools. D: assists in surgical prep and recovery. E: administers anesthesia, monitors patient. F: undergoes surgical procedure. G: instrument table, blue, large, rectangular, matte. H: operating table, black, large, rectangular, rubber. I: secondary table, gray, large, rectangular, metal. J: anesthesia equipment, white, large, irregular, matte. K: instrument, handheld. α: collaboration between staff. β: use of a tool: black, handheld, straight, metal, surgical bone cement gun. γ: use of a tool: white, handheld, irregular, sanitization equipment. δ: proximity of medical staff or equipment to each other in OR. ε: use of a tool: white, small, straight, plastic, surgical scalpel. ζ: use of a tool: orange, handheld, L-shape, plastic, surgical drill. η: use of a tool: brown, handheld, T-shape, metal, surgical hammer. θ: grasping surgical instruments. ι: patient positioned on the operating table. κ: handling of medical objects like operating tables or anesthesia machines. λ: includes draping and sterilization. μ: use of a tool: green, handheld, round, plastic, surgical bone saw. ν: use of a tool: gray, small, straight, metal, surgical scissors. ξ: physical contact between entities. <knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
             else:
@@ -114,7 +115,7 @@ class OracleWrapper:
                     else:
                         surgery_sg_triplets = llava_sg_to_surgery_sg(raw_triplets, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
                     surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint_idx]
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint_idx, TEMPORAL_STYLE='longshort', COMPACT_TEMPORAL=False)
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint_idx, TEMPORAL_STYLE='longshort')
                 else:
                     raise NotImplementedError()
                 if len(memory_str) > 5000:

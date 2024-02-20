@@ -182,7 +182,6 @@ def main():
     WITH_TEMPORAL_AUG = False
     MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
     TEMPORAL_STYLE = 'longshort'  # can be longshort or all or longshort_compact
-    COMPACT_TEMPORAL = False
     INCLUDE_TIMEPOINT = False
     DROP_HISTORY = 0.5  # either False or float
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
@@ -191,9 +190,7 @@ def main():
     # views_to_use = (2,)
     views_to_use = (2, 1, 3, 5)
     # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
-    if COMPACT_TEMPORAL:
-        NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg'
-    elif SYMBOLIC_SG:
+    if SYMBOLIC_SG:
         NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_symbolic_{SG_INDICATOR}sg'
     else:
         NAME = f'{SPLIT}_{N_PERM}perm_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg_{len(views_to_use)}view'
@@ -218,7 +215,8 @@ def main():
 
     dataset = ORDataset(config, SPLIT)
 
-    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG=SYMBOLIC_SG,views_to_use=views_to_use)
+    samples = generate_finetuning_samples_from_dataset(dataset, n_permutations=N_PERM, SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG=SYMBOLIC_SG,
+                                                       views_to_use=views_to_use)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -242,31 +240,27 @@ def main():
         for take_int in range(1, 11):
             take_scene_graphs = [elem for elem in samples if extract_take_int_from_image_path(elem['image']) == take_int]
             # make unique
-            take_scene_graphs = list({elem['image']: elem for elem in take_scene_graphs}.values())
-            # sort by image_path
-            take_scene_graphs = sorted(take_scene_graphs, key=lambda x: x['image'])
+            take_scene_graphs = list({elem['timepoint']: elem for elem in take_scene_graphs}.values())
+            # sort by timepoint
+            take_scene_graphs = sorted(take_scene_graphs, key=lambda x: x['timepoint'])
             take_scene_graphs_reformatted = []
             for take_scene_graph in take_scene_graphs:
                 scene_graph = parse_llava_sg(take_scene_graph['conversations'][1]['value'])
                 take_scene_graphs_reformatted.append({'timepoint_idx': take_scene_graph['timepoint'], 'scene_graph': scene_graph})
-            if COMPACT_TEMPORAL:
-                surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest='patient', IRRELEVANT_PREDS=['closeto', 'closeTo', 'holding', 'touching'])
-            else:
-                surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
+            surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
             with open(f'data/llava_samples/surgery_sg_{take_int}.json', 'w') as f:
                 json.dump(surgery_sg_triplets, f)
             take_to_history[take_int] = surgery_sg_triplets
 
         llava_scene_graphs_with_history = []
         for llava_scene_graph in samples:
-            image_path = llava_scene_graph['image']
+            image_path = llava_scene_graph['image'] if isinstance(llava_scene_graph['image'], str) else llava_scene_graph['image'][0]
             image_path = Path(image_path)
             take_int = extract_take_int_from_image_path(image_path)
             surgery_sg_triplets = take_to_history[take_int]
             timepoint = llava_scene_graph['timepoint']
             surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint]
-            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE=TEMPORAL_STYLE, COMPACT_TEMPORAL=COMPACT_TEMPORAL,
-                                                  INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT)
+            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE=TEMPORAL_STYLE, INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT)
             take_timepoint_to_memory_str[f'{take_int}_{timepoint}'] = memory_str
             input = llava_scene_graph['conversations'][0]['value']
 
@@ -275,14 +269,11 @@ def main():
                 if p < 0.5:
                     memory_str = None
                 elif p < 0.666:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='short', COMPACT_TEMPORAL=COMPACT_TEMPORAL,
-                                                          INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='short', INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
                 elif p < 0.833:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='long', COMPACT_TEMPORAL=COMPACT_TEMPORAL,
-                                                          INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='long', INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
                 else:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='longshort', COMPACT_TEMPORAL=COMPACT_TEMPORAL,
-                                                          INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
+                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='longshort', INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
 
             if memory_str is not None:
                 if MEMORY_INDICATOR == 'single':

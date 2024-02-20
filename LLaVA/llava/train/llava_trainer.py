@@ -18,17 +18,26 @@ from transformers.trainer import (
 )
 from typing import List, Optional
 
-# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_20perm.json') as f:
+# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_100perm.json') as f:
 #     token_frequencies = json.load(f)
 # with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_50perm_symbolic.json') as f: # TODO for symbolic
 #     token_frequencies = json.load(f)
-with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_0.2_True.json') as f:  # TODO adjust
-    token_frequencies = json.load(f)
+# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_0.2_True.json') as f:  # TODO adjust
+#     token_frequencies = json.load(f)
+token_frequencies = None
 
-token_weights = {k: 1 / v for k, v in token_frequencies.items()}  # linear weighting
-# token_weights = {k: 1 / (np.log(v) + 1) for k, v in token_frequencies.items()}  # log weighting, seems to work better in this case
-min_weight = min(token_weights.values())
-extra_token_weight = min_weight / 100  # 100 smaller than the smallest weight
+if token_frequencies is not None:
+    # Linear weighting
+    token_weights = {k: 1 / v for k, v in token_frequencies.items()}
+    # Log weighting (optional, uncomment if preferred)
+    # token_weights = {k: 1 / (np.log(v) + 1) for k, v in token_frequencies.items()}
+    min_weight = min(token_weights.values())
+    extra_token_weight = min_weight / 100  # 100 times smaller than the smallest weight
+else:
+    # If token_frequencies is None, skip these calculations
+    token_weights = None
+    min_weight = None
+    extra_token_weight = None
 
 
 def maybe_zero_3(param, ignore_status=False, name=None):
@@ -155,13 +164,15 @@ class LLaVATrainer(Trainer):
         Subclass and override for custom behavior.
         """
         # check if self has attribute vocab_weight, otherwise create
-        if not hasattr(self, 'vocab_weight'):
+        if not hasattr(self, 'vocab_weight') and token_frequencies is not None:
             vocab = self.tokenizer.get_vocab()
             self.vocab_weight = torch.ones(len(vocab)) * extra_token_weight  # default weight
             # map them using vocab to correct indices
             for k, v in token_weights.items():
                 self.vocab_weight[vocab[k]] = v
             self.vocab_weight = self.vocab_weight.to(self.args.device)
+        elif not hasattr(self, 'vocab_weight'):
+            self.vocab_weight = None  # No weighting applied
 
         outputs = model(**inputs)
 
@@ -169,7 +180,10 @@ class LLaVATrainer(Trainer):
         shift_logits = outputs.logits[..., :-1, :].contiguous()
         shift_labels = outputs.modified_labels[..., 1:].contiguous()
         # Flatten the tokens
-        loss_fct = nn.CrossEntropyLoss(weight=self.vocab_weight)
+        if self.vocab_weight is not None:
+            loss_fct = nn.CrossEntropyLoss(weight=self.vocab_weight)
+        else:
+            loss_fct = nn.CrossEntropyLoss()
         shift_logits = shift_logits.view(-1, self.model.config.vocab_size)
         shift_labels = shift_labels.view(-1)
         # Enable model parallelism
