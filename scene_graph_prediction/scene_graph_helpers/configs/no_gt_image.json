@@ -16,6 +16,7 @@
   "IMAGE_INPUT": "full",
   "EDGE_BUILD_TYPE": "KNN",
   "WEIGHTING": true,
+  "USE_VIS_DESC": false,
   "MODEL": {
     "N_LAYERS": 2,
     "USE_SPATIAL": true,

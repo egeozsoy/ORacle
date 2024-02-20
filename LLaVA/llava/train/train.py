@@ -1010,6 +1010,7 @@ def train():
                 cache_dir=training_args.cache_dir,
                 **bnb_model_from_pretrained_args
             )
+
     else:
         model = transformers.LlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
@@ -1069,6 +1070,7 @@ def train():
             padding_side="right",
             use_fast=False,
         )
+
         # entities =  ["head surgeon", "assistant surgeon", "circulator", "nurse", "anaesthetist", "patient", "instrument table", "operating table", "secondary table", "anesthesia equipment", "instrument"]
         # predicates = ["assisting", "cementing", "cleaning", "closeTo", "cutting", "drilling", "hammering", "holding", "lyingOn", "manipulating", "preparing", "sawing", "suturing", "touching"]
         #
