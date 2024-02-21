@@ -11,8 +11,8 @@ from LLaVA.llava.model.builder import load_pretrained_model
 from torch.utils.data._utils.collate import default_collate
 
 class ImageDataset(Dataset):
-    def __init__(self, img_path, use_aug, num_aug=10):
-        self.image_paths = [os.path.join(img_path, fname) for fname in os.listdir(img_path) if fname.endswith('.jpg')]
+    def __init__(self, img_path, use_aug, num_aug=100):
+        self.image_paths = [os.path.join(img_path, fname) for fname in os.listdir(img_path) if fname.endswith('.jpg') and 'cam2' in fname]
         self.use_aug = use_aug
         self.num_aug = num_aug
         self.transforms = transforms.Compose([
@@ -35,6 +35,7 @@ class ImageDataset(Dataset):
             image_path = self.image_paths[img_idx]
             image = Image.open(image_path).convert('RGB')
             augmented_image = self.augmentations(image)
+            augmented_image = transforms.RandomResizedCrop(image.size, scale=(0.5, 1.0), ratio=(0.75, 1.333))(augmented_image)
             return augmented_image, os.path.basename(image_path).split('.')[0] + f'_aug_{aug_idx}' + '.pt'
         else:
             image_path = self.image_paths[idx]
@@ -59,13 +60,13 @@ if __name__ == '__main__':
     model = model.to(torch.float16)
 
     USE_AUG = True
-    # img_path = "data/original_crops/crops_for_embs/"
-    img_path = "synthetic_or_generation/vis_descriptors/"
+    img_path = "data/original_crops/"
+    # img_path = "synthetic_or_generation/vis_descriptors/"
     batch_size = 100
 
     # Create Dataset and DataLoader
     dataset = ImageDataset(img_path, USE_AUG)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, collate_fn=custom_collate_fn)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, collate_fn=custom_collate_fn)
 
     for batch_images, batch_paths in tqdm(dataloader):
         img_batch = process_images(batch_images, image_processor, model.config)
