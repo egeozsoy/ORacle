@@ -35,7 +35,6 @@ class ImageDataset(Dataset):
             image_path = self.image_paths[img_idx]
             image = Image.open(image_path).convert('RGB')
             augmented_image = self.augmentations(image)
-            augmented_image = transforms.RandomResizedCrop(image.size, scale=(0.5, 1.0), ratio=(0.75, 1.333))(augmented_image)
             return augmented_image, os.path.basename(image_path).split('.')[0] + f'_aug_{aug_idx}' + '.pt'
         else:
             image_path = self.image_paths[idx]

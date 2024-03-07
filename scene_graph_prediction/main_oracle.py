@@ -133,7 +133,7 @@ def main():
         infer_split = 'test'
         train_dataset = ORDataset(config, 'train', shuffle_objs=True, mv_desc=mv_desc)
         eval_dataset = ORDataset(config, infer_split, for_eval=True, mv_desc=mv_desc)
-        eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
+        eval_loader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
         model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,

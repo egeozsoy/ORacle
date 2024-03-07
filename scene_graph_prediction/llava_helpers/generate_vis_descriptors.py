@@ -14,6 +14,8 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
+from torchvision import transforms
+
 from helpers.configurations import TAKE_SPLIT, OR_4D_DATA_ROOT_PATH
 
 replacement_map = {
@@ -166,8 +168,10 @@ def _sample_object_with_descriptor(object_type_to_images, is_instrument, is_equi
 
 
 def init_worker():
-    global object_type_to_images, export_path, take_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, replacement_map, list_of_syn_objects, take_to_view_to_bg  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
-    VIEW_INDICES = (2, 1, 3, 5)
+    global object_type_to_images, export_path, take_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, OCC_AUGS, NUM_OCC_AUGS, replacement_map, list_of_syn_objects, take_to_view_to_bg  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
+    VIEW_INDICES = (2,) #(2, 1, 3, 5)
+    OCC_AUGS = False
+    NUM_OCC_AUGS = 10
 
     export_path = Path('synthetic_or_generation/vis_descriptors')
     export_path.mkdir(exist_ok=True, parents=True)
@@ -223,6 +227,7 @@ def main_worker(d_idx):
         roles = role_labels[ref_scene['idx']]
         data = {'sg': ref_graph, 'descriptors': {}, 'replaced_pred': None, 'replaced_entity': None, 'paths': {}}
         view_to_rgb = {}
+        view_to_rgb_augs = defaultdict(list)
 
         if instrument_image:
             # locate the left or right hand of the surgeon. Place the instrument image there.
@@ -260,31 +265,68 @@ def main_worker(d_idx):
                 hand_position = entity_metadata['left_hand'] if left_or_right == 'left' else entity_metadata['right_hand']
                 if hand_position is None:
                     hand_position = entity_metadata['xmax'] - entity_metadata['xmin'], entity_metadata['ymax'] - entity_metadata['ymin']  # default to entity center
-                # scale the object depending on the depth of the entity. Meaning the further away the entity is, the smaller the object should be.
-                scale_factor = random.randint(200_000, 400_000)
-                object_size = scale_factor / entity_depth
-                instrument_image = instrument_image.resize((int(object_size), int(object_size)))
-                # plot so that center of instrument image is at hand_position
-                rgb.paste(instrument_image, (hand_position[0] - instrument_image.width // 2, hand_position[1] - instrument_image.height // 2), instrument_image)
+
                 instrument_image_paths.append(instrument_image_path)
 
-                # crop around the instrument
-                margin_size = 30  # adjust this value as needed
+                if OCC_AUGS:
+                    for _ in range(NUM_OCC_AUGS):
+                        curr_rgb = deepcopy(rgb)
+                        # scale the object depending on the depth of the entity. Meaning the further away the entity is, the smaller the object should be.
+                        scale_factor = random.randint(200_000, 400_000)
+                        object_size = scale_factor / entity_depth
+                        curr_instrument_image = deepcopy(instrument_image)
+                        curr_instrument_image = curr_instrument_image.resize((int(object_size), int(object_size)))
+                        # cut away pieces of the object
+                        curr_instrument_image = transforms.RandomResizedCrop(curr_instrument_image.size, scale=(0.6, 1.0), ratio=(0.85, 1.15))(curr_instrument_image)
+                        # plot so that center of instrument image is at hand_position
+                        curr_rgb.paste(curr_instrument_image, (hand_position[0] - curr_instrument_image.width // 2, hand_position[1] - curr_instrument_image.height // 2), curr_instrument_image)
 
-                # Calculate the top-left corner of the bounding box with margin
-                top_left_x = max(hand_position[0] - instrument_image.width // 2 - margin_size, 0)
-                top_left_y = max(hand_position[1] - instrument_image.height // 2 - margin_size, 0)
+                        # crop around the instrument
+                        margin_size = 30  # adjust this value as needed
 
-                # Calculate the bottom-right corner of the bounding box with margin
-                bottom_right_x = min(top_left_x + instrument_image.width + 2 * margin_size, rgb.width)
-                bottom_right_y = min(top_left_y + instrument_image.height + 2 * margin_size, rgb.height)
+                        # Calculate the top-left corner of the bounding box with margin
+                        top_left_x = max(hand_position[0] - curr_instrument_image.width // 2 - margin_size, 0)
+                        top_left_y = max(hand_position[1] - curr_instrument_image.height // 2 - margin_size, 0)
 
-                # Define the bounding box for cropping with margin
-                bounding_box = (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+                        # Calculate the bottom-right corner of the bounding box with margin
+                        bottom_right_x = min(top_left_x + curr_instrument_image.width + 2 * margin_size, curr_rgb.width)
+                        bottom_right_y = min(top_left_y + curr_instrument_image.height + 2 * margin_size, curr_rgb.height)
 
-                # Crop the image with margin
-                rgb = rgb.crop(bounding_box)
-                view_to_rgb[view_idx] = rgb
+                        # Define the bounding box for cropping with margin
+                        bounding_box = (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+
+                        # Crop the image with margin
+                        curr_rgb = curr_rgb.crop(bounding_box)
+                        view_to_rgb_augs[view_idx].append(curr_rgb)
+
+                else:
+                    curr_rgb = deepcopy(rgb)
+                    # scale the object depending on the depth of the entity. Meaning the further away the entity is, the smaller the object should be.
+                    scale_factor = random.randint(200_000, 400_000)
+                    object_size = scale_factor / entity_depth
+                    instrument_image = instrument_image.resize((int(object_size), int(object_size)))
+
+                    # plot so that center of instrument image is at hand_position
+                    curr_rgb.paste(instrument_image, (hand_position[0] - instrument_image.width // 2, hand_position[1] - instrument_image.height // 2),
+                              instrument_image)
+
+                    # crop around the instrument
+                    margin_size = 30  # adjust this value as needed
+
+                    # Calculate the top-left corner of the bounding box with margin
+                    top_left_x = max(hand_position[0] - instrument_image.width // 2 - margin_size, 0)
+                    top_left_y = max(hand_position[1] - instrument_image.height // 2 - margin_size, 0)
+
+                    # Calculate the bottom-right corner of the bounding box with margin
+                    bottom_right_x = min(top_left_x + instrument_image.width + 2 * margin_size, rgb.width)
+                    bottom_right_y = min(top_left_y + instrument_image.height + 2 * margin_size, rgb.height)
+
+                    # Define the bounding box for cropping with margin
+                    bounding_box = (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+
+                    # Crop the image with margin
+                    curr_rgb = curr_rgb.crop(bounding_box)
+                    view_to_rgb[view_idx] = curr_rgb
 
             # now correctly update the scene graph
             new_graph = []
@@ -332,41 +374,89 @@ def main_worker(d_idx):
                 clean_bg = Image.fromarray(clean_bg)
                 # finish the cleaning by pasting clean_bg on top of rgb
                 rgb.paste(clean_bg, (0, 0), clean_bg)
-                # 2) Start adding the new equipment. But mask it again using entity mask to make sure it does not exceed the entity boundaries.
-                scale_factor = random.randint(800_000, 1_400_000)
-                object_size = scale_factor / entity_depth
-                equipment_image = equipment_image.resize((int(object_size), int(object_size)))
-                # plot equipment image into an empty canvas with the same size of the entity mask
-                equipment_image_canvas = Image.new('RGBA', (entity_mask.shape[1], entity_mask.shape[0]))
-                equipment_image_canvas.paste(equipment_image, (entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - equipment_image.width // 2,
-                                                               entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - equipment_image.height // 2), equipment_image)
-                # mask the equipment image canvas using entity mask
-                equipment_image_canvas = np.asarray(equipment_image_canvas).copy()
-                equipment_image_canvas[entity_mask] = 0
-                equipment_image_canvas = Image.fromarray(equipment_image_canvas)
-                # now plot the equipment image canvas on top of the rgb image
-                rgb.paste(equipment_image_canvas, (0, 0), equipment_image_canvas)
                 equipment_image_paths.append(equipment_image_path)
 
-                # crop around the instrument
-                left = entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - equipment_image.width // 2
-                top = entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - equipment_image.height // 2
-                right = left + equipment_image.width
-                bottom = top + equipment_image.height
+                if OCC_AUGS:
+                    for _ in range(NUM_OCC_AUGS):
+                        curr_rgb = deepcopy(rgb)
+                        # 2) Start adding the new equipment. But mask it again using entity mask to make sure it does not exceed the entity boundaries.
+                        scale_factor = random.randint(800_000, 1_400_000)
+                        object_size = scale_factor / entity_depth
+                        curr_equipment_image = deepcopy(equipment_image)
+                        curr_equipment_image = curr_equipment_image.resize((int(object_size), int(object_size)))
+                        # cut away pieces of the object
+                        curr_equipment_image = transforms.RandomResizedCrop(curr_equipment_image.size, scale=(0.6, 1.0), ratio=(0.85, 1.15))(curr_equipment_image)
 
-                # Define margin size (in pixels)
-                margin_size = 30  # adjust this value as needed
+                        # plot equipment image into an empty canvas with the same size of the entity mask
+                        equipment_image_canvas = Image.new('RGBA', (entity_mask.shape[1], entity_mask.shape[0]))
+                        equipment_image_canvas.paste(curr_equipment_image, (entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - curr_equipment_image.width // 2,
+                                                                       entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - curr_equipment_image.height // 2), curr_equipment_image)
+                        # mask the equipment image canvas using entity mask
+                        equipment_image_canvas = np.asarray(equipment_image_canvas).copy()
+                        equipment_image_canvas[entity_mask] = 0
+                        equipment_image_canvas = Image.fromarray(equipment_image_canvas)
+                        # now plot the equipment image canvas on top of the rgb image
+                        curr_rgb.paste(equipment_image_canvas, (0, 0), equipment_image_canvas)
 
-                # Expand the bounding box by the margin size
-                left = max(left - margin_size, 0)
-                top = max(top - margin_size, 0)
-                right = min(right + margin_size, equipment_image_canvas.width)
-                bottom = min(bottom + margin_size, equipment_image_canvas.height)
+                        # crop around the instrument
+                        left = entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - curr_equipment_image.width // 2
+                        top = entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - curr_equipment_image.height // 2
+                        right = left + curr_equipment_image.width
+                        bottom = top + curr_equipment_image.height
 
-                # Crop the canvas around the equipment with the margin
-                bounding_box_with_margin = (left, top, right, bottom)
-                rgb = rgb.crop(bounding_box_with_margin)
-                view_to_rgb[view_idx] = rgb
+                        # Define margin size (in pixels)
+                        margin_size = 30  # adjust this value as needed
+
+                        # Expand the bounding box by the margin size
+                        left = max(left - margin_size, 0)
+                        top = max(top - margin_size, 0)
+                        right = min(right + margin_size, equipment_image_canvas.width)
+                        bottom = min(bottom + margin_size, equipment_image_canvas.height)
+
+                        # Crop the canvas around the equipment with the margin
+                        bounding_box_with_margin = (left, top, right, bottom)
+                        curr_rgb = curr_rgb.crop(bounding_box_with_margin)
+                        view_to_rgb_augs[view_idx].append(curr_rgb)
+
+                else:
+                    curr_rgb = deepcopy(rgb)
+                    # 2) Start adding the new equipment. But mask it again using entity mask to make sure it does not exceed the entity boundaries.
+                    scale_factor = random.randint(800_000, 1_400_000)
+                    object_size = scale_factor / entity_depth
+                    equipment_image = equipment_image.resize((int(object_size), int(object_size)))
+
+                    # plot equipment image into an empty canvas with the same size of the entity mask
+                    equipment_image_canvas = Image.new('RGBA', (entity_mask.shape[1], entity_mask.shape[0]))
+                    equipment_image_canvas.paste(equipment_image, (
+                    entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - equipment_image.width // 2,
+                    entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - equipment_image.height // 2),
+                                                 equipment_image)
+                    # mask the equipment image canvas using entity mask
+                    equipment_image_canvas = np.asarray(equipment_image_canvas).copy()
+                    equipment_image_canvas[entity_mask] = 0
+                    equipment_image_canvas = Image.fromarray(equipment_image_canvas)
+                    # now plot the equipment image canvas on top of the rgb image
+                    curr_rgb.paste(equipment_image_canvas, (0, 0), equipment_image_canvas)
+
+                    # crop around the instrument
+                    left = entity_metadata['xmin'] + (entity_metadata['xmax'] - entity_metadata['xmin']) // 2 - equipment_image.width // 2
+                    top = entity_metadata['ymin'] + (entity_metadata['ymax'] - entity_metadata['ymin']) // 2 - equipment_image.height // 2
+                    right = left + equipment_image.width
+                    bottom = top + equipment_image.height
+
+                    # Define margin size (in pixels)
+                    margin_size = 30  # adjust this value as needed
+
+                    # Expand the bounding box by the margin size
+                    left = max(left - margin_size, 0)
+                    top = max(top - margin_size, 0)
+                    right = min(right + margin_size, equipment_image_canvas.width)
+                    bottom = min(bottom + margin_size, equipment_image_canvas.height)
+
+                    # Crop the canvas around the equipment with the margin
+                    bounding_box_with_margin = (left, top, right, bottom)
+                    curr_rgb = curr_rgb.crop(bounding_box_with_margin)
+                    view_to_rgb[view_idx] = curr_rgb
 
             # now correctly update the scene graph
             new_graph = []
@@ -397,14 +487,19 @@ def main_worker(d_idx):
         # 3.1. Save the image
         # assert at least one view is not None (1 valid crop)
         assert any([rgb is not None for rgb in view_to_rgb.values()])
-        for view_idx, rgb in view_to_rgb.items():
-            if rgb is not None: # object not visible from this view
-                rgb = rgb.convert('RGB')
-                rgb.save(export_path / Path(str(object_img.stem) + f"_crop_cidx{view_idx}.jpg"))
+        if OCC_AUGS:
+            for view_idx, rgbs in view_to_rgb_augs.items():
+                for aug_num, rgb in enumerate(rgbs):
+                    rgb = rgb.convert('RGB')
+                    rgb.save(export_path / Path(str(object_img.stem) + f"crop_cidx{view_idx}_aug{aug_num}.jpg"))
+        else:
+            for view_idx, rgb in view_to_rgb.items():
+                if rgb is not None: # object not visible from this view
+                    rgb = rgb.convert('RGB')
+                    rgb.save(export_path / Path(str(object_img.stem) + f"_crop_cidx{view_idx}.jpg"))
         return (True, d_idx)
     except Exception as e:
         return (False, d_idx)
-
 
 def main():
     global list_of_syn_objects
