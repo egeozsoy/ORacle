@@ -119,7 +119,7 @@ def main():
             model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                                   weights_obj=train_dataset.w_cls_obj,
                                   weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
-                                  model_path=str(checkpoint))
+                                  model_path=str(checkpoint), mv_desc=mv_desc)
             model.validate(train_loader, limit_val_batches=1000 // batch_size, logging_information={'split': 'train', "logger": logger, "checkpoint_id": checkpoint_id})
             model.validate(eval_loader, logging_information={'split': 'val', "logger": logger, "checkpoint_id": checkpoint_id})
             # cleanup before next run
@@ -131,14 +131,14 @@ def main():
     elif mode == 'infer':
         print(f'Model path: {args.model_path}')
         infer_split = 'test'
-        train_dataset = ORDataset(config, 'train', shuffle_objs=True)
-        eval_dataset = ORDataset(config, infer_split, for_eval=True)
+        train_dataset = ORDataset(config, 'train', shuffle_objs=True, mv_desc=mv_desc)
+        eval_dataset = ORDataset(config, infer_split, for_eval=True, mv_desc=mv_desc)
         eval_loader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
         model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,
                               weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
-                              model_path=args.model_path)
+                              model_path=args.model_path, mv_desc=mv_desc)
 
         results = model.infer(eval_loader)
         # results should be batch scan id -> list of relations

@@ -456,38 +456,37 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     else: # image not in scene
                         assert is_inscene == False # this iterates only through synthetic objects and negative samples
                         path_prefix = f'{picked_attributes["object_type"]}_{picked_attributes["color"]}_{picked_attributes["size"]}_{picked_attributes["shape"]}_{picked_attributes["texture"]}'
-                        if CROP_AUGS:
-                            if MV_DESCRIPTORS:
-                                cams = [1, 2, 3, 5]
-                                random.shuffle(cams)
-                                n_cams = random.randint(1, len(cams))
-                                cams = cams[:n_cams]
-                            else:
-                                cams = [2]
-                                n_cams = 1
+                        if MV_DESCRIPTORS:
+                            cams = [1, 2, 3, 5]
+                            random.shuffle(cams)
+                            n_cams = random.randint(1, len(cams))
+                            cams = cams[:n_cams]
+                        else:
+                            cams = [2]
+                            n_cams = 1
 
-                            if CROP_AUGS:
-                                sucess = False
-                                while not sucess:
-                                    sucess = True
-                                    crop_paths = []
-                                    for cidx in cams:
-                                        try:
-                                            crop_path = random.choice([path for path in object_view_to_descriptor_paths[picked_attributes["object_type"]][cidx] if path.startswith(path_prefix)]) + ".pt"
-                                        except Exception as e:
-                                            sucess = False
-                                            cams = [i for i in [2,1,3,5] if i != cidx]
-                                            random.shuffle(cams)
-                                            n_cams = random.randint(1, len(cams))
-                                            cams = cams[:n_cams]
-                                            break
-                                        else:
-                                            crop_paths.append(crop_path)
-                            else:
+                        if CROP_AUGS:
+                            sucess = False
+                            while not sucess:
+                                sucess = True
                                 crop_paths = []
                                 for cidx in cams:
-                                    crop_path = random.choice([path for path in object_view_to_descriptor_paths[picked_attributes["object_type"]][cidx] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
-                                    crop_paths.append(crop_path)
+                                    try:
+                                        crop_path = random.choice([path for path in object_view_to_descriptor_paths[picked_attributes["object_type"]][cidx] if path.startswith(path_prefix)]) + ".pt"
+                                    except Exception as e:
+                                        sucess = False
+                                        cams = [i for i in [2,1,3,5] if i != cidx]
+                                        random.shuffle(cams)
+                                        n_cams = random.randint(1, len(cams))
+                                        cams = cams[:n_cams]
+                                        break
+                                    else:
+                                        crop_paths.append(crop_path)
+                        else:
+                            crop_paths = []
+                            for cidx in cams:
+                                crop_path = random.choice([path for path in object_view_to_descriptor_paths[picked_attributes["object_type"]][cidx] if path.startswith(path_prefix) and "_aug_" not in path]) + ".pt"
+                                crop_paths.append(crop_path)
 
                         crop_paths = ["synthetic_or_generation/vis_descriptors/" + crop_path for crop_path in crop_paths]
                     vis_descriptor_paths[name] = crop_paths
@@ -548,7 +547,7 @@ def main():
     WITHOUT = [] #'hammering', 'drilling', 'sawing'
     # views_to_use = (2)
     views_to_use = (2, 1, 3, 5)
-    MV_DESCRIPTORS = True # if false, only use cam2 descriptor else 1-4 descriptors randomly chosen from all views in random order
+    MV_DESCRIPTORS = False # if false, only use cam2 descriptor else 1-4 descriptors randomly chosen from all views in random order
     if len(views_to_use) == 1:
         MV_DESCRIPTORS = False
 
@@ -556,7 +555,7 @@ def main():
     if COMPACT_TEMPORAL:
         NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_compact_{SG_INDICATOR}sg_synthetic'
     elif SYMBOLIC_SG:
-        NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_symbolic_{SG_INDICATOR}sg_synthetic_visual_colorswitch'
+        NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_symbolic_{SG_INDICATOR}sg_synthetic_visual'
     else:
         NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg_synthetic'
     if not INCLUDE_TIMEPOINT:
@@ -568,7 +567,7 @@ def main():
     if len(views_to_use) > 1:
         NAME += f'_{len(views_to_use)}views'
     if len(WITHOUT) > 0:
-        NAME += f'_without{"_".join(WITHOUT)}2'
+        NAME += f'_without{"_".join(WITHOUT)}'
     if MV_DESCRIPTORS:
         NAME += '_mv_descriptors'
 
