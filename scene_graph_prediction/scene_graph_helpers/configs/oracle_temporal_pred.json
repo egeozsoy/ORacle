@@ -6,13 +6,13 @@
   "W_DECAY": 0.001,
   "NUM_WORKERS": 8,
   "USE_GT": false,
+  "USE_VIS_DESC": false,
   "CAMERAS": [
     2
   ],
   "IMAGE_INPUT": "full",
   "EDGE_BUILD_TYPE": "KNN",
   "temporality": "PRED",
-  "COMPACT_TEMPORAL": false,
   "WEIGHTING": true,
   "MODEL": {
     "N_LAYERS": 2,

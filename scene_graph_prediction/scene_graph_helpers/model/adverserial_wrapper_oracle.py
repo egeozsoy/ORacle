@@ -101,7 +101,7 @@ class AdverserialOracleWrapper:
             vis_desc = [des.to(self.model.device, dtype=torch.bfloat16) for des in elem['vis_descriptor_embs']]  # TODO we need a better way to guarantee the order of these
         elif '_symbolic' in self.model_name:
             textual_str = f'{textual_attributes["color"]}, {textual_attributes["size"]}, {textual_attributes["shape"]}, {textual_attributes["texture"]}, {textual_attributes["object_type"]}.'
-            if label in ['cementing', 'cutting', 'drilling', 'hammering', 'retracting', 'robotic_sawing', 'sawing', 'suturing']:
+            if label in ['cementing', 'cutting', 'drilling', 'hammering', 'robotic_sawing', 'sawing', 'suturing']:
                 if label == 'robotic_sawing':
                     label = 'sawing'
                 customizations = [(label, f'use of a tool: {textual_str}', 'p')]
@@ -176,7 +176,7 @@ class AdverserialOracleWrapper:
             label_idx = labels_to_idx[elem['label']]
 
             test_condition_fullfilled, output = self.forward(batch)  # if is_pos it should be fullfilled, if not it should not be fullfilled
-            if is_pos:
+            if is_pos == True:
                 gts.append(label_idx)
             else:
                 gts.append(labels_to_idx['none'])
@@ -188,5 +188,5 @@ class AdverserialOracleWrapper:
         included_labels = list(range(len(labels_to_idx) - 1))  # Excluding the last label ('none')
 
         results = classification_report(gts, preds, labels=included_labels,
-                                        target_names=self.labels, output_dict=False, zero_division=0)
+                                        target_names=self.labels, output_dict=False, zero_division=1.0)
         print(results)

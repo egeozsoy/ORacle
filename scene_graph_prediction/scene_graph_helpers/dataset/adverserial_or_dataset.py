@@ -25,8 +25,8 @@ class AdverserialORDataset(Dataset):
                 negative_image_path = (positive_image_path.parent.parent / 'negatives' / positive_image_path.name).absolute()
                 with json_file_path.open('r') as f:
                     json_data = json.load(f)
-                self.all_test_cases.append((json_data, positive_image_path, label, 1))
-                self.all_test_cases.append((json_data, negative_image_path, label, -1))
+                self.all_test_cases.append((json_data, positive_image_path, label, True))
+                self.all_test_cases.append((json_data, negative_image_path, label, False))
 
     def __len__(self):
         return len(self.all_test_cases)

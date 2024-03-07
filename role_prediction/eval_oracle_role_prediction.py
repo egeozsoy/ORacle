@@ -65,12 +65,12 @@ def get_rels_path(take_idx, USE_GT):
         if USE_GT:
             return Path('data/relationships_validation.json')
         else:
-            return Path('scan_relations_oracle_val.json')
+            return Path('scan_relations_oracle_mv_learned_temporal_pred_val.json')
     elif take_idx in TAKE_SPLIT['test']:
         if USE_GT:
             return Path('data/relationships_test_dummy.json')
         else:
-            return Path('scan_relations_oracle_test.json')
+            return Path('scan_relations_oracle_mv_learned_temporal_pred_test.json')
 
     return None
 
@@ -115,8 +115,7 @@ def main():
     split_to_all_gt_labels = defaultdict(list)
     split_to_all_pred_labels = defaultdict(list)
 
-    # for take_idx in TAKE_SPLIT['train'] + TAKE_SPLIT['val'] + TAKE_SPLIT['test']:
-    for take_idx in TAKE_SPLIT['train'] + TAKE_SPLIT['val']:
+    for take_idx in TAKE_SPLIT['train'] + TAKE_SPLIT['val'] + TAKE_SPLIT['test']:
         all_gt_labels = []
         all_pred_labels = []
         rels_path = get_rels_path(take_idx, USE_GT_SCENE_GRAPHS)

@@ -8,14 +8,10 @@
   "USE_GT": false,
   "USE_VIS_DESC": false,
   "CAMERAS": [
-    2,
-    1,
-    3,
-    5
+    2
   ],
   "IMAGE_INPUT": "full",
   "EDGE_BUILD_TYPE": "KNN",
-  "temporality": "PRED",
   "WEIGHTING": true,
   "MODEL": {
     "N_LAYERS": 2,
@@ -52,6 +48,6 @@
     "image_res": 0,
     "class_choice": [],
     "max_edges": -1,
-    "DATASET_SUFFIX": ""
+    "DATASET_SUFFIX": "_pl"
   }
 }

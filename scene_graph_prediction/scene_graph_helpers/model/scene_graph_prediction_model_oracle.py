@@ -114,10 +114,7 @@ class OracleWrapper:
                     take_idx = elem['take_idx']
                     timepoint_idx = int(elem['scan_id'].split('_')[1])
                     raw_triplets = self.take_to_history[take_idx]
-                    if self.config['COMPACT_TEMPORAL']:
-                        surgery_sg_triplets = llava_sg_to_surgery_sg(raw_triplets, entity_of_interest='patient', IRRELEVANT_PREDS=['closeto', 'closeTo', 'holding', 'touching'])
-                    else:
-                        surgery_sg_triplets = llava_sg_to_surgery_sg(raw_triplets, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
+                    surgery_sg_triplets = llava_sg_to_surgery_sg(raw_triplets, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
                     surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint_idx]
                     memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint_idx, TEMPORAL_STYLE='longshort')
                 else:

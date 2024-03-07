@@ -56,11 +56,18 @@ def scene_graph_to_string(scene_graph, SG_INDICATOR='double', SYMBOLIC_SG_MAP=No
     return out
 
 
-def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, SYMBOLIC_SG_MAP=None, cot_prompt=None):
+def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, SYMBOLIC_SG_MAP=None, cot_prompt=None, image_json=None, WITHOUT=()):
     # human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
     if INCLUDE_TIMEPOINT:
         human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
     elif SYMBOLIC_SG_MAP is not None:
+        if len(WITHOUT) > 0:
+            for pred in WITHOUT:
+                symbol = SYMBOLIC_SG_MAP["predicate_name_to_symbol"][pred]
+                synthetic_preds = {elem.lower() for elem in image_json['descriptors'].keys()}
+                if not (pred in synthetic_preds):  # real 4D-OR objects have to go, fake objects can stay
+                    SYMBOLIC_SG_MAP["predicate_symbol_to_descriptor"].pop(symbol)
+
         # integrate the symbols and knowledge
         entity_symbol_to_descriptor_sorted = sorted(SYMBOLIC_SG_MAP["entity_symbol_to_descriptor"].items(), key=lambda x: x[0])
         predicate_symbol_to_descriptor_sorted = sorted(SYMBOLIC_SG_MAP["predicate_symbol_to_descriptor"].items(), key=lambda x: x[0])
@@ -160,7 +167,7 @@ def _fake_attributes(FAKE_P, object_to_valid_attributes, name, picked_attributes
     return None
 
 
-def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False, FAKE_ATTRIBUTES=False, FAKE_P=0.2, COT_PROMPTING=False):
+def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False, FAKE_ATTRIBUTES=False, FAKE_P=0.2, COT_PROMPTING=False, WITHOUT=()):
     samples = []
     all_json_paths = list(path.glob('*.json'))
     shuffle(all_json_paths)
@@ -359,7 +366,8 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
         else:
             symbolic_sg_map = None
         scene_graph_string = scene_graph_to_string(relations, SG_INDICATOR=SG_INDICATOR, SYMBOLIC_SG_MAP=symbolic_sg_map)
-        sample = apply_template(image_paths, scene_graph_string, timepoint=int(json_path.stem), INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG_MAP=symbolic_sg_map, cot_prompt=cot_prompt)
+        sample = apply_template(image_paths, scene_graph_string, timepoint=int(json_path.stem), INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG_MAP=symbolic_sg_map, cot_prompt=cot_prompt,
+                                image_json=image_json, WITHOUT=WITHOUT)
         samples.append(sample)
 
     return samples
@@ -375,9 +383,9 @@ def main():
     SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SYMBOLIC_SG = True
     SPLIT = 'train'
-    FAKE_ATTRIBUTES = True
+    FAKE_ATTRIBUTES = False
     FAKE_P = 0.5
-    COT_PROMPTING = True  # chain of thought prompting
+    COT_PROMPTING = False  # chain of thought prompting
     WITHOUT = []
     # TODO WITHOUT = ['drilling','hammering','sawing'] # TODO hammering, sawing, drilling
     # views_to_use = (2,)
@@ -426,7 +434,7 @@ def main():
 
     samples = generate_finetuning_samples(dataset_path, views_to_use=views_to_use,
                                           SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
-                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, COT_PROMPTING=COT_PROMPTING)
+                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, COT_PROMPTING=COT_PROMPTING, WITHOUT=WITHOUT)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
