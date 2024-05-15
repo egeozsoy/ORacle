@@ -1,0 +1,14 @@
+/adverserial_4dor/
+/synthetic_or_generation/dis_background_removal_helpers/saved_models/isnet-general-use.pth
+/evaluated_checkpoints.json
+/requirements_submission.txt
+/EGE_README.MD
+/LLaVA/slurm_config_multiview.conf
+/LLaVA/slurm_config_multiview_aug.conf
+/LLaVA/slurm_config_multiview_temporal.conf
+/LLaVA/slurm_config_multiview_temporal_curriculum.conf
+/LLaVA/slurm_config_symbolic.conf
+/LLaVA/slurm_config_symbolic_synthetic_mv.conf
+/LLaVA/slurm_config_symbolic_synthetic_removal_mv.conf
+/slurm_config.conf
+/slurm_config_generate_novel_entities.conf
