@@ -3,15 +3,12 @@ import warnings
 from collections import Counter, defaultdict
 from copy import deepcopy
 from random import shuffle
+
 import transformers
 from tqdm import tqdm
-from tqdm.contrib.concurrent import process_map
 
-from helpers.configurations import OR_4D_DATA_ROOT_PATH
-from scene_graph_prediction.llava_helpers.scene_graph_converters import extract_take_int_from_image_path, parse_llava_sg, llava_sg_to_surgery_sg, surgery_sg_to_memory_str
 from scene_graph_prediction.llava_helpers.descriptors import ENTITY_DESCRIPTORS_TRAINING, PREDICATE_DESCRIPTORS_TRAINING, ENTITY_SYMBOLS, PREDICATE_SYMBOLS
 from synthetic_or_generation.generate_novel_augmentations import replacement_map, EQUIPMENT, INSTRUMENTS
-from synthetic_or_generation.generate_novel_entities import sample_attributes, surgical_tools_and_equipment, ATTRIBUTES
 
 warnings.filterwarnings('ignore')
 import argparse
@@ -21,14 +18,11 @@ import json_tricks as json  # Allows to load integers etc. correctly
 import pytorch_lightning as pl
 
 
-def scene_graph_to_string(scene_graph, SG_INDICATOR='double', SYMBOLIC_SG_MAP=None):
+def scene_graph_to_string(scene_graph, SYMBOLIC_SG_MAP=None):
     '''
     Scene graph is a list of relations in the form of (subject, relation, object)
     '''
-    if SG_INDICATOR == 'double':
-        out = '<SG> '
-    else:
-        raise NotImplementedError
+    out = '<SG> '
     for (subject, relation, object) in scene_graph:
         subject = subject.replace('_', ' ').lower()
         object = object.replace('_', ' ').lower()
@@ -50,24 +44,13 @@ def scene_graph_to_string(scene_graph, SG_INDICATOR='double', SYMBOLIC_SG_MAP=No
 
         out += f'{subject},{object},{relation}; '
 
-    if SG_INDICATOR == 'double':
-        # remove the last ";" and add the end token.
-        out = out.rstrip('; ') + ' </SG>'
+    out = out.rstrip('; ') + ' </SG>'
     return out
 
 
-def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, SYMBOLIC_SG_MAP=None, cot_prompt=None, image_json=None, WITHOUT=()):
+def apply_template(image_paths, scene_graph, timepoint, SYMBOLIC_SG_MAP=None, image_json=None):
     # human_prompt = 'Describe this image using a scene graph, represented as a list of triplets. Each triplet consists of a subject(entity), an object(entity), and a predicate. Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching].'
-    if INCLUDE_TIMEPOINT:
-        human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text. Do not include the timepoint format "T-" in the triplets.'
-    elif SYMBOLIC_SG_MAP is not None:
-        if len(WITHOUT) > 0:
-            for pred in WITHOUT:
-                symbol = SYMBOLIC_SG_MAP["predicate_name_to_symbol"][pred]
-                synthetic_preds = {elem.lower() for elem in image_json['descriptors'].keys()}
-                if not (pred in synthetic_preds):  # real 4D-OR objects have to go, fake objects can stay
-                    SYMBOLIC_SG_MAP["predicate_symbol_to_descriptor"].pop(symbol)
-
+    if SYMBOLIC_SG_MAP is not None:
         # integrate the symbols and knowledge
         entity_symbol_to_descriptor_sorted = sorted(SYMBOLIC_SG_MAP["entity_symbol_to_descriptor"].items(), key=lambda x: x[0])
         predicate_symbol_to_descriptor_sorted = sorted(SYMBOLIC_SG_MAP["predicate_symbol_to_descriptor"].items(), key=lambda x: x[0])
@@ -81,14 +64,8 @@ def apply_template(image_paths, scene_graph, timepoint, INCLUDE_TIMEPOINT=True, 
         human_prompt += f'<knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
     else:
         human_prompt = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
-    if cot_prompt is not None:
-        # specify that the model should use chain of thought prompting
-        human_prompt += ' Use chain-of-thought.'
     id = f'{image_paths[0].parent.parent.stem}/{timepoint}'
-    if cot_prompt is not None:
-        value = f'{cot_prompt}\n{scene_graph}'
-    else:
-        value = scene_graph
+    value = scene_graph
     sample = {'id': id, 'timepoint': timepoint, 'image': [str(image_path.absolute()) for image_path in image_paths] if len(image_paths) > 1 else str(image_paths[0].absolute()),
               "conversations": [
                   {
@@ -119,7 +96,6 @@ def _sample_negatives(image_json, object_to_valid_attributes, k_negative_entitie
     for (sub, rel, obj) in image_json['sg']:
         used_entities.add(sub.lower().replace('_', ' '))
         used_entities.add(obj.lower().replace('_', ' '))
-        used_predicates.add(rel[0].lower() + rel[1:])
     if image_json['replaced_pred'] is not None:
         used_predicates.add(image_json['replaced_pred'].lower())
 
@@ -151,23 +127,7 @@ def _sample_negatives(image_json, object_to_valid_attributes, k_negative_entitie
     return negative_entity_samples + negative_predicate_samples
 
 
-def _fake_attributes(FAKE_P, object_to_valid_attributes, name, picked_attributes):
-    if random.random() < FAKE_P:  # decide if the object should have real or fake attributes
-        new_attributes = random.choice(object_to_valid_attributes[name])
-        # check if any attribute actually changed, otherwise return None
-        changed = False
-        for key, value in picked_attributes.items():
-            if new_attributes[key] != value:
-                changed = True
-            picked_attributes[key] = new_attributes[key]
-        if not changed:
-            return None
-        return name
-
-    return None
-
-
-def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', INCLUDE_TIMEPOINT=True, SYMBOLIC_SG=False, FAKE_ATTRIBUTES=False, FAKE_P=0.2, COT_PROMPTING=False, WITHOUT=()):
+def generate_finetuning_samples(path, views_to_use=(2,), SYMBOLIC_SG=False):
     samples = []
     all_json_paths = list(path.glob('*.json'))
     shuffle(all_json_paths)
@@ -246,9 +206,6 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     all_attributes = sorted(list(descriptors.items()))
                     n_attributes = random.randint(1, len(all_attributes))
                     picked_attributes = {key: value for key, value in random.sample(all_attributes, n_attributes)}
-                    if FAKE_ATTRIBUTES:
-                        entity_to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, entity_name, picked_attributes)
-                        if entity_to_delete is not None: entities_to_delete.append(entity_to_delete)
                     textual_attributes[entity_name] = picked_attributes
                     text_descriptor = ", ".join(picked_attributes.values()) + '.'
                     entity_descriptors[entity_name] = [text_descriptor]
@@ -265,9 +222,6 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                     all_attributes = sorted(list(descriptors.items()))
                     n_attributes = random.randint(1, len(all_attributes))
                     picked_attributes = {key: value for key, value in random.sample(all_attributes, n_attributes)}
-                    if FAKE_ATTRIBUTES:
-                        predicate_to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, predicate_name, picked_attributes)
-                        if predicate_to_delete is not None: predicates_to_delete.append(predicate_to_delete)
                     textual_attributes[predicate_name] = picked_attributes
                     text_descriptor = ", ".join(picked_attributes.values())
                     text_descriptor = f'use of a tool: {text_descriptor}.'
@@ -291,13 +245,9 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                             name_tmp = name[0].lower() + name[1:]
                         visual_attributes[name_tmp] = descriptors
                         textual_attributes[name_tmp] = picked_attributes
-                        to_delete = _fake_attributes(FAKE_P, object_to_valid_attributes, name_tmp, picked_attributes)
-                        if to_delete is not None:
-                            if is_entity: entities_to_delete.append(to_delete)
-                            if is_predicate: predicates_to_delete.append(to_delete)
-                        else:  # it might be already marked for deletion, then reverse that
-                            if is_entity and name_tmp in entities_to_delete: entities_to_delete.remove(name_tmp)
-                            if is_predicate and name_tmp in predicates_to_delete: predicates_to_delete.remove(name_tmp)
+
+                        if is_entity and name_tmp in entities_to_delete: entities_to_delete.remove(name_tmp)
+                        if is_predicate and name_tmp in predicates_to_delete: predicates_to_delete.remove(name_tmp)
 
                     text_descriptor = ", ".join(picked_attributes.values())
                     # first letter should be capitalized. The sentence should end with a period.
@@ -322,39 +272,6 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
 
             # clean the scene graph by deleting the entities and predicates we don't want to use
             new_graph = []
-            cot_prompt = None
-            if COT_PROMPTING:  # For every visual thing, we add a COT prompt. Either it is still in the scene: Then we write down a thinging and matching prompt. Or it is not in the scene because the attributes was not matching: Then we write down that it does not match and why.
-                cot_prompt = '"""\n'
-                all_subs_objs_rels = set()
-                for (sub, rel, obj) in relations:
-                    try:
-                        all_subs_objs_rels.add((sub.replace('_', ' '), entity_name_to_symbol[sub.replace('_', ' ').lower()]))
-                        all_subs_objs_rels.add((obj.replace('_', ' '), entity_name_to_symbol[obj.replace('_', ' ').lower()]))
-                        rel_tmp = rel[0].lower() + rel[1:]
-                        if rel_tmp == 'operating': rel_tmp = 'manipulating'
-                        all_subs_objs_rels.add((rel[0].lower() + rel[1:], predicate_name_to_symbol[rel_tmp]))
-                    except Exception as e:
-                        print(e)
-                        continue
-                # randomize the order
-                all_subs_objs_rels = list(all_subs_objs_rels)
-                for elem, symbol in all_subs_objs_rels:
-                    if elem in visual_attributes:
-                        visual_attributes_elem = visual_attributes[elem]
-                        if elem in entities_to_delete or elem in predicates_to_delete:
-                            # deny
-                            unmatching_attributes_text = ''
-                            for key in ['color', 'size', 'shape', 'texture']:
-                                if key in visual_attributes_elem and key in textual_attributes[elem]:
-                                    if visual_attributes_elem[key] != textual_attributes[elem][key]:
-                                        unmatching_attributes_text += f'{visual_attributes_elem[key]} != {textual_attributes[elem][key]}, '
-                            # delete the last comma
-                            unmatching_attributes_text = unmatching_attributes_text.rstrip(', ')
-                            cot_prompt += f'{visual_attributes_elem["color"]}, {visual_attributes_elem["size"]}, {visual_attributes_elem["shape"]}, {visual_attributes_elem["texture"]}, {visual_attributes_elem["object_type"]}: Not {symbol} ({unmatching_attributes_text})\n'
-                        else:
-                            # affirm
-                            cot_prompt += f'{visual_attributes_elem["color"]}, {visual_attributes_elem["size"]}, {visual_attributes_elem["shape"]}, {visual_attributes_elem["texture"]}, {visual_attributes_elem["object_type"]}: {symbol}\n'
-                cot_prompt += '"""'
 
             for (sub, rel, obj) in relations:
                 if sub.replace('_', ' ') not in entities_to_delete and rel.lower() not in predicates_to_delete and obj.replace('_', ' ') not in entities_to_delete:
@@ -365,49 +282,24 @@ def generate_finetuning_samples(path, views_to_use=(2,), SG_INDICATOR='double', 
                                'predicate_symbol_to_descriptor': predicate_symbol_to_descriptor}
         else:
             symbolic_sg_map = None
-        scene_graph_string = scene_graph_to_string(relations, SG_INDICATOR=SG_INDICATOR, SYMBOLIC_SG_MAP=symbolic_sg_map)
-        sample = apply_template(image_paths, scene_graph_string, timepoint=int(json_path.stem), INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT, SYMBOLIC_SG_MAP=symbolic_sg_map, cot_prompt=cot_prompt,
-                                image_json=image_json, WITHOUT=WITHOUT)
+        scene_graph_string = scene_graph_to_string(relations, SYMBOLIC_SG_MAP=symbolic_sg_map)
+        sample = apply_template(image_paths, scene_graph_string, timepoint=int(json_path.stem), SYMBOLIC_SG_MAP=symbolic_sg_map, image_json=image_json)
         samples.append(sample)
 
     return samples
 
 
 def main():
-    ADD_TEMPORAL = False
-    WITH_TEMPORAL_AUG = False
-    MEMORY_INDICATOR = 'double'  # single: Memory, double: <memory_start> and <memory_end>
-    TEMPORAL_STYLE = 'longshort'  # can be longshort or all or longshort_compact
-    INCLUDE_TIMEPOINT = False
-    DROP_HISTORY = 0.5  # either False or float
-    SG_INDICATOR = 'double'  # double: <SG> and </SG>
     SYMBOLIC_SG = True
     SPLIT = 'train'
-    FAKE_ATTRIBUTES = False
-    FAKE_P = 0.5
-    COT_PROMPTING = False  # chain of thought prompting
-    WITHOUT = []
-    # TODO WITHOUT = ['drilling','hammering','sawing'] # TODO hammering, sawing, drilling
     # views_to_use = (2,)
     views_to_use = (2, 1, 3, 5)
-    # TODO FLAG FOR TIMEPOINT and DROPPING. Naming Scheme should be so that only interesting flags are including in the name, not if they are False.
-    # TODO do multiview
     if SYMBOLIC_SG:
-        NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_symbolic_{SG_INDICATOR}sg_synthetic'
+        NAME = f'{SPLIT}_symbolic_synthetic'
     else:
-        NAME = f'{SPLIT}_{ADD_TEMPORAL}temp_{MEMORY_INDICATOR}mem_{WITH_TEMPORAL_AUG}tempaug_{TEMPORAL_STYLE}_{SG_INDICATOR}sg_synthetic'
-    if FAKE_ATTRIBUTES:
-        NAME += f'_fake_attributes_{FAKE_P}'
-    if not INCLUDE_TIMEPOINT:
-        NAME += '_notimepoints'
-    if DROP_HISTORY is not False and DROP_HISTORY > 0.01:
-        NAME += f'_drophistory{DROP_HISTORY}'
-    if COT_PROMPTING:
-        NAME += '_cot'
+        NAME = f'{SPLIT}_synthetic'
     if len(views_to_use) > 1:
         NAME += f'_{len(views_to_use)}views'
-    if len(WITHOUT) > 0:
-        NAME += f'_without{"_".join(WITHOUT)}'
     print(f'Creating samples for LLAVA dataset with name {NAME}')
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -422,19 +314,11 @@ def main():
         use_fast=False,
     )
     if len(views_to_use) > 1:
-        if len(WITHOUT) > 0:
-            dataset_path = Path(f'/home/guests/shared/Oracle/synthetic_4D-OR_mv_without{"_".join(WITHOUT)}')
-        else:
-            dataset_path = Path('/home/guests/shared/Oracle/synthetic_4D-OR_mv')
+        dataset_path = Path('/home/guests/shared/Oracle/synthetic_4D-OR_mv')
     else:
-        if len(WITHOUT) > 0:
-            dataset_path = Path(f'synthetic_or_generation/synthetic_4D-OR_without{"_".join(WITHOUT)}')
-        else:
-            dataset_path = Path('synthetic_or_generation/synthetic_4D-OR')
+        dataset_path = Path('synthetic_or_generation/synthetic_4D-OR')
 
-    samples = generate_finetuning_samples(dataset_path, views_to_use=views_to_use,
-                                          SG_INDICATOR=SG_INDICATOR, INCLUDE_TIMEPOINT=INCLUDE_TIMEPOINT,
-                                          SYMBOLIC_SG=SYMBOLIC_SG, FAKE_ATTRIBUTES=FAKE_ATTRIBUTES, FAKE_P=FAKE_P, COT_PROMPTING=COT_PROMPTING, WITHOUT=WITHOUT)
+    samples = generate_finetuning_samples(dataset_path, views_to_use=views_to_use, SYMBOLIC_SG=SYMBOLIC_SG)
     # Load the tokenizer which will be used
     # val_samples = generate_finetuning_samples_from_dataset(val_dataset)
     # Also calculate the corresponding word frequencies
@@ -450,80 +334,16 @@ def main():
     # randomly shuffle the samples
     shuffle(samples)
 
-    if ADD_TEMPORAL:
-        print('Adding temporal information...')
-        take_to_history = {}
-        take_timepoint_to_memory_str = {}
-
-        for take_int in range(1, 11):
-            take_scene_graphs = [elem for elem in samples if extract_take_int_from_image_path(elem['image']) == take_int]
-            # make unique
-            take_scene_graphs = list({elem['image']: elem for elem in take_scene_graphs}.values())
-            # sort by image_path
-            take_scene_graphs = sorted(take_scene_graphs, key=lambda x: x['image'])
-            take_scene_graphs_reformatted = []
-            for take_scene_graph in take_scene_graphs:
-                scene_graph = parse_llava_sg(take_scene_graph['conversations'][1]['value'])
-                take_scene_graphs_reformatted.append({'timepoint_idx': take_scene_graph['timepoint'], 'scene_graph': scene_graph})
-            surgery_sg_triplets = llava_sg_to_surgery_sg(take_scene_graphs_reformatted, entity_of_interest=None, IRRELEVANT_PREDS=['closeto', 'closeTo'])
-            with open(f'data/llava_samples/surgery_sg_{take_int}.json', 'w') as f:
-                json.dump(surgery_sg_triplets, f)
-            take_to_history[take_int] = surgery_sg_triplets
-
-        llava_scene_graphs_with_history = []
-        for llava_scene_graph in samples:
-            image_path = llava_scene_graph['image']
-            image_path = Path(image_path)
-            take_int = extract_take_int_from_image_path(image_path)
-            surgery_sg_triplets = take_to_history[take_int]
-            timepoint = llava_scene_graph['timepoint']
-            surgery_sg_triplets = [elem for elem in surgery_sg_triplets if elem[0] < timepoint]
-            memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE=TEMPORAL_STYLE, INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT)
-            memory_str2 = memory_str
-            take_timepoint_to_memory_str[f'{take_int}_{timepoint}'] = memory_str
-            input = llava_scene_graph['conversations'][0]['value']
-
-            if WITH_TEMPORAL_AUG:
-                p = random.random()
-                if p < 0.5:
-                    memory_str = None
-                elif p < 0.666:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='short', INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
-                elif p < 0.833:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='long', INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
-                else:
-                    memory_str = surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint=timepoint, TEMPORAL_STYLE='longshort', INCLUDE_TIMEPOINTS=INCLUDE_TIMEPOINT, DROP_HISTORY=DROP_HISTORY)
-
-            if memory_str is not None:
-                if MEMORY_INDICATOR == 'single':
-                    input = input.replace('<image>\n', f'<image>\nMemory: {memory_str}.')
-                elif MEMORY_INDICATOR == 'double':
-                    input = input.replace('<image>\n', f'<image>\n<memory_start>: {memory_str}<memory_end>.')
-                else:
-                    raise NotImplementedError
-
-            # input = input.replace('Describe this image', 'Describe this image at timepoint T')  # add timepoint to the question
-            llava_scene_graph['conversations'][0]['value'] = input
-            llava_scene_graphs_with_history.append(llava_scene_graph)
-
-        samples = llava_scene_graphs_with_history
-
-        with open(f'data/llava_samples/{NAME}_take_timepoint_to_memory_str.json', 'w') as f:
-            json.dump(take_timepoint_to_memory_str, f)
 
     with open(f'data/llava_samples/{NAME}.json', 'w') as f:
         json.dump(samples, f, indent=4)
 
-    if SPLIT == 'train' and not ADD_TEMPORAL:
+    if SPLIT == 'train':
         if SYMBOLIC_SG:
-            if len(WITHOUT) > 0:
-                with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_{COT_PROMPTING}_without{"_".join(WITHOUT)}.json', 'w') as f:
-                    json.dump(token_freq, f, indent=4)
-            else:
-                with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_{FAKE_P}_{COT_PROMPTING}.json', 'w') as f:
+            with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic.json', 'w') as f:
                     json.dump(token_freq, f, indent=4)
         else:
-            with open(f'data/llava_samples/train_token_freqs_7b_perm_synthetic_removal_{FAKE_P}_{COT_PROMPTING}.json', 'w') as f:
+            with open(f'data/llava_samples/train_token_freqs_7b_perm_synthetic.json', 'w') as f:
                 json.dump(token_freq, f, indent=4)
 
 

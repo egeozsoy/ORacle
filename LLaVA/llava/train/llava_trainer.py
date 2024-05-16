@@ -1,12 +1,10 @@
 import json
 import os
+from typing import List, Optional
 
-import numpy as np
 import torch
 from torch import nn
-
 from torch.utils.data import Sampler
-
 from transformers import Trainer
 from transformers.trainer import (
     is_sagemaker_mp_enabled,
@@ -16,15 +14,10 @@ from transformers.trainer import (
     ShardedDDPOption,
     logger,
 )
-from typing import List, Optional
 
-# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_100perm.json') as f:
-#     token_frequencies = json.load(f)
-# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_50perm_symbolic.json') as f: # TODO for symbolic
-#     token_frequencies = json.load(f)
-# with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_symbolic_synthetic_removal_0.2_True.json') as f:  # TODO adjust
-#     token_frequencies = json.load(f)
-token_frequencies = None
+with open('/home/guests/ege_oezsoy/Oracle/data/llava_samples/train_token_freqs_7b_100perm.json') as f:
+    token_frequencies = json.load(f)  # TODO switch to this for normal training
+# token_frequencies = None # TODO switch to this for symbolic training
 
 if token_frequencies is not None:
     # Linear weighting

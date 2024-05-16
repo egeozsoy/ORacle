@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Union
 
 OBJECT_COLOR_MAP = {
     'anesthesia_equipment': (0.96, 0.576, 0.65),
@@ -47,8 +46,6 @@ OBJECT_LABEL_MAP = {
 TAKE_SPLIT = {'train': [1, 3, 5, 7, 9, 10], 'val': [4, 8], 'test': [2, 6]}
 
 OR_4D_DATA_ROOT_PATH = Path('../4D-OR')
-MMOR_DATA_ROOT_PATH = Path('/home/guests/ege_oezsoy/MM-OR_processed')  # server
-# OR_4D_DATA_ROOT_PATH = Path('/Users/egeozsoy/Documents/4D-OR')  # local
 EXPORT_HOLISTICS_PATHS = list(OR_4D_DATA_ROOT_PATH.glob('export_holistic_take*'))
 OBJECT_POSES_PATH = OR_4D_DATA_ROOT_PATH / 'object_pose_results'
 OBJECT_SCANS_PATH = OR_4D_DATA_ROOT_PATH / 'object_scans'

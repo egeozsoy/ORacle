@@ -15,14 +15,13 @@
 
 from abc import ABC, abstractmethod
 
+import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
+from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, VIS_DESCRIPTOR_TOKEN_INDEX
 
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector, build_image_pooler
-from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-
-from llava.mm_utils import get_anyres_image_grid_shape
 
 
 class LlavaMetaModel:
@@ -33,11 +32,7 @@ class LlavaMetaModel:
         if hasattr(config, "mm_vision_tower"):
             self.vision_tower = build_vision_tower(config, delay_load=True)
             self.mm_projector = build_vision_projector(config)
-
-            if 'unpad' in getattr(config, 'mm_patch_merge_type', ''):
-                self.image_newline = nn.Parameter(
-                    torch.empty(config.hidden_size, dtype=self.dtype)
-                )
+            self.image_pooler = build_image_pooler(config)
 
     def get_vision_tower(self):
         vision_tower = getattr(self, 'vision_tower', None)
@@ -45,12 +40,14 @@ class LlavaMetaModel:
             vision_tower = vision_tower[0]
         return vision_tower
 
+    def get_image_pooler(self):
+        return self.image_pooler
+
     def initialize_vision_modules(self, model_args, fsdp=None):
         vision_tower = model_args.vision_tower
         mm_vision_select_layer = model_args.mm_vision_select_layer
         mm_vision_select_feature = model_args.mm_vision_select_feature
         pretrain_mm_mlp_adapter = model_args.pretrain_mm_mlp_adapter
-        mm_patch_merge_type = model_args.mm_patch_merge_type
 
         self.config.mm_vision_tower = vision_tower
 
@@ -73,16 +70,9 @@ class LlavaMetaModel:
         self.config.mm_hidden_size = vision_tower.hidden_size
         self.config.mm_vision_select_layer = mm_vision_select_layer
         self.config.mm_vision_select_feature = mm_vision_select_feature
-        self.config.mm_patch_merge_type = mm_patch_merge_type
 
         if getattr(self, 'mm_projector', None) is None:
             self.mm_projector = build_vision_projector(self.config)
-
-            if 'unpad' in mm_patch_merge_type:
-                embed_std = 1 / torch.sqrt(torch.tensor(self.config.hidden_size, dtype=self.dtype))
-                self.image_newline = nn.Parameter(
-                    torch.randn(self.config.hidden_size, dtype=self.dtype) * embed_std
-                )
         else:
             # In case it is frozen by LoRA
             for p in self.mm_projector.parameters():
@@ -99,38 +89,6 @@ class LlavaMetaModel:
                 return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
 
             self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
-
-
-def unpad_image(tensor, original_size):
-    """
-    Unpads a PyTorch tensor of a padded and resized image.
-
-    Args:
-    tensor (torch.Tensor): The image tensor, assumed to be in CxHxW format.
-    original_size (tuple): The original size of the image (height, width).
-
-    Returns:
-    torch.Tensor: The unpadded image tensor.
-    """
-    original_width, original_height = original_size
-    current_height, current_width = tensor.shape[1:]
-
-    original_aspect_ratio = original_width / original_height
-    current_aspect_ratio = current_width / current_height
-
-    if original_aspect_ratio > current_aspect_ratio:
-        scale_factor = current_width / original_width
-        new_height = int(original_height * scale_factor)
-        padding = (current_height - new_height) // 2
-        unpadded_tensor = tensor[:, padding:current_height - padding, :]
-    else:
-        scale_factor = current_height / original_height
-        new_width = int(original_width * scale_factor)
-        padding = (current_width - new_width) // 2
-        unpadded_tensor = tensor[:, :, padding:current_width - padding]
-
-    return unpadded_tensor
-
 
 class LlavaMetaForCausalLM(ABC):
 
@@ -227,7 +185,7 @@ class LlavaMetaForCausalLM(ABC):
         return self.get_model().get_image_pooler()
 
     def prepare_inputs_labels_for_multimodal(
-        self, input_ids, position_ids, attention_mask, past_key_values, labels, images, vis_descriptor_embs, image_sizes=None
+        self, input_ids, position_ids, attention_mask, past_key_values, labels, images, vis_descriptor_embs
     ):
         vision_tower = self.get_vision_tower()
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
@@ -344,7 +302,7 @@ class LlavaMetaForCausalLM(ABC):
             # add visual descriptors in order
             # image loop already added first text part after the <image> token, so we can directly add the first vis descriptor + the text part after it
             if vis_descriptor_embs is not None:
-                if type(vis_descriptor_embs[0]) is not list:  # batchsize 1
+                if type(vis_descriptor_embs[0]) is not list:  #batchsize 1
                     vis_descriptor_embs = [vis_descriptor_embs]
                 for j in range(num_vis_descriptors):
                     cur_descriptor_features = vis_descriptor_embs[batch_idx][j].to(self.device)

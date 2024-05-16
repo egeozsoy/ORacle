@@ -1,7 +1,6 @@
 ### ScienceQA
 
 #### Prepare Data
-
 1. Please see ScienceQA [repo](https://github.com/lupantech/ScienceQA) for setting up the dataset.
 2. Generate ScienceQA dataset for LLaVA conversation-style format.
 

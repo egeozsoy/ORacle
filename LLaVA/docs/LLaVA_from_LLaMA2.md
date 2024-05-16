@@ -9,6 +9,7 @@ Llama 2 checkpoints, and release it to the community for the public use.
 
 You need to apply for and download the latest Llama 2 checkpoints to start your own training (apply [here](https://ai.meta.com/resources/models-and-libraries/llama-downloads/))
 
+
 ## Training
 
 Please
@@ -17,7 +18,6 @@ checkout [`pretrain.sh`](https://github.com/haotian-liu/LLaVA/blob/main/scripts/
 ## LLaVA (based on Llama 2), What is different?
 
 :volcano: How is the new LLaVA based on Llama 2 different from Llama 1? The comparisons of the training process are described:
-
 - **Pre-training**. The pre-trained base LLM is changed from Llama 1 to Llama 2
 - **Language instruction-tuning**. The previous LLaVA model starts with Vicuna, which is instruct tuned on ShareGPT data from Llama 1; The new LLaVA model starts with Llama 2 Chat, which is an
   instruct tuned checkpoint on dialogue data from Llama 2.

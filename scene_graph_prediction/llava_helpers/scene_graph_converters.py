@@ -110,7 +110,7 @@ def parse_llava_sg(llava_sg):
     return triplets
 
 
-def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='all', INCLUDE_TIMEPOINTS=True, DROP_HISTORY=False):
+def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_STYLE='longshort', DROP_HISTORY=False):
     '''
     Temporal style can be all, long, short, longshort
     '''
@@ -120,21 +120,13 @@ def surgery_sg_to_memory_str(surgery_sg_triplets, current_timepoint, TEMPORAL_ST
         if rel_timepoint == last_reltimepoint:  # add without timepoint
             m_str = f'{sub},{obj},{pred}; '
         else:
-            if INCLUDE_TIMEPOINTS:
-                m_str = f'T-{rel_timepoint}: {sub},{obj},{pred}; '  # add with timepoint
-            else:
-                m_str = f'{sub},{obj},{pred}; '
+            m_str = f'{sub},{obj},{pred}; '
             last_reltimepoint = rel_timepoint
         return m_str, last_reltimepoint
 
     memory_str = ''
     last_reltimepoint = -1
-    if TEMPORAL_STYLE == 'all':
-        raise NotImplementedError
-        for timepoint, (sub, pred, obj) in surgery_sg_triplets:
-            m_str, last_reltimepoint = _get_memory_str(sub, obj, pred, timepoint, last_reltimepoint)
-            memory_str += m_str
-    elif TEMPORAL_STYLE == 'short':
+    if TEMPORAL_STYLE == 'short':
         # Only include the most recent 5 changes, formatted as short term memory.
         memory_str += 'Short: '
         for timepoint, (sub, pred, obj) in surgery_sg_triplets[-5:]:

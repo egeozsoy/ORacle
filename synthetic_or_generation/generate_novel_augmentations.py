@@ -56,11 +56,7 @@ def _load_gt_scene_graphs_in_prediction_format():
     all_scan_relations = {}
     for take_idx in TAKE_SPLIT['train']:
         if take_idx in TAKE_SPLIT['train']:
-            gt_rels_path = Path('scene_graph_data/relationships_train.json')
-        elif take_idx in TAKE_SPLIT['val']:
-            gt_rels_path = Path('scene_graph_data/relationships_validation.json')
-        elif take_idx in TAKE_SPLIT['test']:
-            gt_rels_path = Path('scene_graph_data/relationships_test.json')
+            gt_rels_path = Path('data/relationships_train.json')
         else:
             raise Exception()
         with open(gt_rels_path) as f:
@@ -85,11 +81,7 @@ def _load_gt_role_labels(take_indices):
         root_path = OR_4D_DATA_ROOT_PATH / 'human_name_to_3D_joints'
         GT_take_human_name_to_3D_joints = np.load(str(root_path / f'{take_idx}_GT_True.npz'), allow_pickle=True)['arr_0'].item()
         if take_idx in TAKE_SPLIT['train']:
-            gt_rels_path = Path('scene_graph_data/relationships_train.json')
-        elif take_idx in TAKE_SPLIT['val']:
-            gt_rels_path = Path('scene_graph_data/relationships_validation.json')
-        elif take_idx in TAKE_SPLIT['test']:
-            gt_rels_path = Path('scene_graph_data/relationships_test.json')
+            gt_rels_path = Path('data/relationships_train.json')
         else:
             raise Exception()
         with open(gt_rels_path) as f:
@@ -139,23 +131,13 @@ def _preprocess_metadata(metadata, entity_crops_path: Path, view_indices):
         metadata[key] = [v for i, v in enumerate(values) if i not in indices_to_remove]
 
 
-def _sample_suitable_scene(graphs, entities_needed, predicates_needed, WITHOUT=None):
+def _sample_suitable_scene(graphs, entities_needed, predicates_needed):
     suitable_scenes = []
     for idx, graph in graphs.items():
         entities = {elem[0] for elem in graph} | {elem[2] for elem in graph}
         predicates = {elem[1] for elem in graph if elem[2] == 'Patient'}
         # remove any predicate that is used multiple times in the scene
         predicates = {elem for elem in predicates if len([elem2 for elem2 in graph if elem2[1] == elem]) == 1}
-
-        if WITHOUT is not None and len(WITHOUT) > 0:
-            forbidden = False
-            for without in WITHOUT:
-                if any([without.lower() in elem[1].lower() for elem in graph]):
-                    forbidden = True
-                    break
-            if forbidden:
-                continue
-
         # if at least one entity from entities_needed is in entities and at least one predicate from predicates_needed is in predicates then add to suitable_scenes
         if (len(entities_needed & entities) > 0 or len(entities_needed) == 0) and (len(predicates_needed & predicates) > 0 or len(predicates_needed) == 0):
             suitable_scenes.append({'suitable_entities': entities_needed & entities, 'suitable_predicates': predicates_needed & predicates, 'idx': idx})
@@ -176,18 +158,12 @@ def _sample_object_with_descriptor(object_type_to_images, is_instrument, is_equi
 
 
 def init_worker():
-    global object_type_to_images, export_path, take_to_view_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, replacement_map, WITHOUT  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
+    global object_type_to_images, export_path, take_to_view_to_bg, meta_data, entity_crops_path, graphs, role_labels, VIEW_INDICES, replacement_map  # Efficient, as each worker will have its own copy of these variables, no need to share/serialize them.
     VIEW_INDICES = (2, 1, 3, 5)
     images_dir = Path('synthetic_or_generation/images_sdxl')
     object_type_to_images = defaultdict(list)
-    WITHOUT = ['drilling']
 
-    print(f'WITHOUT: {WITHOUT}')
-
-    if len(WITHOUT) == 0:
-        export_path = Path('synthetic_or_generation/synthetic_4D-OR_mv')
-    else:
-        export_path = Path(f'synthetic_or_generation/synthetic_4D-OR_mv_without{"_".join(WITHOUT)}')
+    export_path = Path('synthetic_or_generation/synthetic_4D-OR_mv')
     export_path.mkdir(exist_ok=True, parents=True)
 
     # 1. First fetch the background images
@@ -204,7 +180,7 @@ def init_worker():
     _preprocess_metadata(meta_data, entity_crops_path, VIEW_INDICES)
 
     graphs = _load_gt_scene_graphs_in_prediction_format()
-    role_labels = _load_gt_role_labels(TAKE_SPLIT['train'] + TAKE_SPLIT['val'] + TAKE_SPLIT['test'])
+    role_labels = _load_gt_role_labels(TAKE_SPLIT['train'])
 
     for image in images_dir.glob('*.png'):
         corresponding_json = images_dir / f'{image.stem}.json'
@@ -236,7 +212,7 @@ def main_worker(d_idx):
         if equipment_image:
             entities_needed.update(replacement_map[equipment_attrs['object_type']]['replace_entity_from'])
 
-        ref_scene = _sample_suitable_scene(graphs, entities_needed, predicates_needed, WITHOUT)
+        ref_scene = _sample_suitable_scene(graphs, entities_needed, predicates_needed)
         ref_take, ref_idx = ref_scene['idx'].split('_')
         ref_graph = graphs[ref_scene['idx']]
         roles = role_labels[ref_scene['idx']]
@@ -391,7 +367,7 @@ def main_worker(d_idx):
 
 def main():
     SYNTHETIC_DATASET_SIZE = 200_000
-    NUM_WORKERS = 192
+    NUM_WORKERS = multiprocessing.cpu_count()
     print(f'Using {NUM_WORKERS} workers')
 
     remaining_indices = set(range(SYNTHETIC_DATASET_SIZE))

@@ -5,14 +5,12 @@
 ## Installation
 
 1. Clone this repository and navigate to LLaVA folder
-
 ```bash
 git clone https://github.com/haotian-liu/LLaVA.git
 cd LLaVA
 ```
 
 2. Install Package
-
 ```Shell
 conda create -n llava python=3.10 -y
 conda activate llava

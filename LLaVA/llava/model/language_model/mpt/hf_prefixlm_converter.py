@@ -6,10 +6,11 @@ Causal LM to convert it to a Prefix LM.
 Prefix LMs accepts a `bidirectional_mask` input in `forward`
 and treat the input prompt as the prefix in `generate`.
 """
-import math
 import warnings
 from types import MethodType
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+import math
 import torch
 from transformers.models.bloom.modeling_bloom import BaseModelOutputWithPastAndCrossAttentions, BloomForCausalLM, BloomModel, CausalLMOutputWithCrossAttentions, CrossEntropyLoss
 from transformers.models.bloom.modeling_bloom import _expand_mask as _expand_mask_bloom
