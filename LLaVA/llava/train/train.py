@@ -157,9 +157,23 @@ def get_peft_state_maybe_zero_3(named_params, bias):
 
 
 def get_peft_state_non_lora_maybe_zero_3(named_params, require_grad_only=True):
+    raise Exception('The extended version should be used instead.')
     to_return = {k: t for k, t in named_params if "lora_" not in k}
     if require_grad_only:
         to_return = {k: t for k, t in to_return.items() if t.requires_grad}
+    to_return = {k: maybe_zero_3(v, ignore_status=True).cpu() for k, v in to_return.items()}
+    return to_return
+
+
+def get_peft_state_non_lora_maybe_zero_3_extended(model, require_grad_only=True):
+    '''
+    Supports both params but also buffers
+    '''
+    named_entities = list(model.named_parameters()) + list(model.named_buffers())
+    to_return = {k: v for k, v in named_entities if "lora_" not in k}
+    if require_grad_only:
+        # For buffers, requires_grad attribute does not apply, so they should be included regardless
+        to_return = {k: v for k, v in to_return.items() if type(v) == torch.Tensor or v.requires_grad}
     to_return = {k: maybe_zero_3(v, ignore_status=True).cpu() for k, v in to_return.items()}
     return to_return
 
@@ -1169,8 +1183,8 @@ def train():
                 state_dict = get_peft_state_maybe_zero_3(
                     model.named_parameters(), training_args.lora_bias
                 )
-                non_lora_state_dict = get_peft_state_non_lora_maybe_zero_3(
-                    model.named_parameters()
+                non_lora_state_dict = get_peft_state_non_lora_maybe_zero_3_extended(
+                    model
                 )
                 if args.local_rank in [-1, 0]:
                     model.config.save_pretrained(checkpoint_dir)
@@ -1199,8 +1213,8 @@ def train():
         state_dict = get_peft_state_maybe_zero_3(
             model.named_parameters(), training_args.lora_bias
         )
-        non_lora_state_dict = get_peft_state_non_lora_maybe_zero_3(
-            model.named_parameters()
+        non_lora_state_dict = get_peft_state_non_lora_maybe_zero_3_extended(
+            model
         )
         if training_args.local_rank == 0 or training_args.local_rank == -1:
             model.config.save_pretrained(training_args.output_dir)
