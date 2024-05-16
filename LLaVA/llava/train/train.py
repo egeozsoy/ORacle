@@ -13,33 +13,28 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-import math
-import os
 import copy
-import random
-from dataclasses import dataclass, field
 import json
 import logging
+import os
 import pathlib
+import random
+from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence, List, Tuple
 
-import numpy as np
+import math
 import torch
-
 import transformers
-from torch import Tensor
-from torchvision.transforms import functional as F, InterpolationMode
-
-from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-from torch.utils.data import Dataset
-from llava.train.llava_trainer import LLaVATrainer
-
-from llava import conversation as conversation_lib
-from llava.model import *
-from llava.mm_utils import tokenizer_image_token
-
 from PIL import Image
+from llava import conversation as conversation_lib
+from llava.constants import IGNORE_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from llava.mm_utils import tokenizer_image_token
+from llava.model import *
+from llava.train.llava_trainer import LLaVATrainer
+from torch import Tensor
+from torch.utils.data import Dataset
 from torchinfo import summary
+from torchvision.transforms import functional as F, InterpolationMode
 
 local_rank = None
 

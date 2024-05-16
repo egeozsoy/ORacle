@@ -1,10 +1,10 @@
 import json
 import os
-import torch
 from pathlib import Path
 
 import numpy as np
 import open3d as o3d
+import torch
 
 from helpers.configurations import INSTANCE_LABELS_PATH, OBJECT_LABEL_MAP, INSTANCE_LABELS_PRED_PATH, TAKE_SPLIT, OR_4D_DATA_ROOT_PATH
 from scene_graph_prediction.data_processing import compute_weight_occurrences

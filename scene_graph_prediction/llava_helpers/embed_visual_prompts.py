@@ -1,14 +1,14 @@
 import os
+
 import torch
 from PIL import Image
-from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data._utils.collate import default_collate
+from torchvision import transforms
 from tqdm import tqdm
 
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images
 from LLaVA.llava.model.builder import load_pretrained_model
-
-from torch.utils.data._utils.collate import default_collate
 
 
 class ImageDataset(Dataset):

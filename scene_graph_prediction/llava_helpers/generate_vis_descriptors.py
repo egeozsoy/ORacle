@@ -3,7 +3,6 @@
 # 3) Save new scene image, new scene graph, and new descriptors. (new data point)
 
 import json
-import multiprocessing
 import random
 from collections import defaultdict
 from copy import deepcopy
@@ -12,9 +11,8 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from tqdm import tqdm
-
 from torchvision import transforms
+from tqdm import tqdm
 
 from helpers.configurations import TAKE_SPLIT, OR_4D_DATA_ROOT_PATH
 

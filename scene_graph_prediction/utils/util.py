@@ -1,4 +1,4 @@
-import os, json
+import os
 
 
 def check_file_exist(path):

@@ -1,6 +1,3 @@
-import torch.nn as nn
-import re
-from transformers import BertConfig, BertModel
 import re
 
 import torch.nn as nn
@@ -55,6 +52,7 @@ def build_vision_projector(config, delay_load=False, **kwargs):
 
     raise ValueError(f'Unknown projector type: {projector_type}')
 
+
 class ImageEmbeddingPooler(nn.Module):
     def __init__(self):
         super().__init__()
@@ -82,6 +80,7 @@ class ImageEmbeddingPooler(nn.Module):
         outputs = outputs['last_hidden_state'].to(embeddings.dtype)[:, :576]
 
         return outputs
+
 
 def build_image_pooler(config):
     return ImageEmbeddingPooler()

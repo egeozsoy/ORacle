@@ -1,9 +1,9 @@
 import json
+import random
 from pathlib import Path
 
 import numpy as np
 import open3d as o3d
-import random
 import torch
 from PIL import Image
 

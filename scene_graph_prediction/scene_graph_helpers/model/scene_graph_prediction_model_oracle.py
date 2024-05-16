@@ -3,22 +3,18 @@
 import itertools
 import json
 import re
-import shutil
 from collections import defaultdict
 from copy import deepcopy
-from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 from PIL import Image
 from sklearn.metrics import classification_report
 from tqdm import tqdm
 
 from LLaVA.llava.constants import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_END_TOKEN, IMAGE_TOKEN_INDEX, DEFAULT_IM_START_TOKEN, VIS_DESCRIPTOR_TOKEN
-from LLaVA.llava.conversation import conv_templates, SeparatorStyle, default_conversation
+from LLaVA.llava.conversation import SeparatorStyle, default_conversation
 from LLaVA.llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token, KeywordsStoppingCriteria
 from LLaVA.llava.model.builder import load_pretrained_model
-
 from scene_graph_prediction.llava_helpers.scene_graph_converters import llava_sg_to_surgery_sg, surgery_sg_to_memory_str
 from scene_graph_prediction.scene_graph_helpers.dataset.dataset_utils import map_scene_graph_name_to_vocab_idx, map_vocab_idx_to_scene_graph_name, reversed_role_synonyms
 

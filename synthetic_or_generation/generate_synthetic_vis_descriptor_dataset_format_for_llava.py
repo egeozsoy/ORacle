@@ -3,18 +3,16 @@ import warnings
 from collections import Counter, defaultdict
 from copy import deepcopy
 from random import shuffle
+
 import transformers
 from tqdm import tqdm
-from tqdm.contrib.concurrent import process_map
 
 from LLaVA.llava.constants import VIS_DESCRIPTOR_TOKEN
-from helpers.configurations import OR_4D_DATA_ROOT_PATH
-from scene_graph_prediction.llava_helpers.scene_graph_converters import extract_take_int_from_image_path, parse_llava_sg, llava_sg_to_surgery_sg, \
-    surgery_sg_to_memory_str
 from scene_graph_prediction.llava_helpers.descriptors import ENTITY_DESCRIPTORS_TRAINING, PREDICATE_DESCRIPTORS_TRAINING, ENTITY_SYMBOLS, \
     PREDICATE_SYMBOLS
+from scene_graph_prediction.llava_helpers.scene_graph_converters import extract_take_int_from_image_path, parse_llava_sg, llava_sg_to_surgery_sg, \
+    surgery_sg_to_memory_str
 from synthetic_or_generation.generate_novel_augmentations import replacement_map, EQUIPMENT, INSTRUMENTS
-from synthetic_or_generation.generate_novel_entities import sample_attributes, surgical_tools_and_equipment, ATTRIBUTES
 
 warnings.filterwarnings('ignore')
 import argparse

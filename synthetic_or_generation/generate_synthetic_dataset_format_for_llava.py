@@ -334,14 +334,13 @@ def main():
     # randomly shuffle the samples
     shuffle(samples)
 
-
     with open(f'data/llava_samples/{NAME}.json', 'w') as f:
         json.dump(samples, f, indent=4)
 
     if SPLIT == 'train':
         if SYMBOLIC_SG:
             with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic.json', 'w') as f:
-                    json.dump(token_freq, f, indent=4)
+                json.dump(token_freq, f, indent=4)
         else:
             with open(f'data/llava_samples/train_token_freqs_7b_perm_synthetic.json', 'w') as f:
                 json.dump(token_freq, f, indent=4)

@@ -90,6 +90,7 @@ class LlavaMetaModel:
 
             self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
 
+
 class LlavaMetaForCausalLM(ABC):
 
     @abstractmethod
@@ -302,7 +303,7 @@ class LlavaMetaForCausalLM(ABC):
             # add visual descriptors in order
             # image loop already added first text part after the <image> token, so we can directly add the first vis descriptor + the text part after it
             if vis_descriptor_embs is not None:
-                if type(vis_descriptor_embs[0]) is not list:  #batchsize 1
+                if type(vis_descriptor_embs[0]) is not list:  # batchsize 1
                     vis_descriptor_embs = [vis_descriptor_embs]
                 for j in range(num_vis_descriptors):
                     cur_descriptor_features = vis_descriptor_embs[batch_idx][j].to(self.device)
