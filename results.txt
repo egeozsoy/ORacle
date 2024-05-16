@@ -1,0 +1,297 @@
+4D-OR approach single view (camera 2): -> Oracle with camera 2 will be around 0.88 vs 0.5
+              precision    recall  f1-score   support
+
+   Assisting       0.30      0.67      0.42       168
+   Cementing       0.56      0.37      0.44        27
+    Cleaning       0.32      0.52      0.40       107
+     CloseTo       0.95      0.54      0.69     18065
+     Cutting       0.35      0.11      0.16        57
+    Drilling       0.33      0.91      0.48        33
+   Hammering       0.68      0.73      0.70        44
+     Holding       0.66      0.57      0.61       910
+     LyingOn       0.92      0.86      0.89      1208
+   Operating       0.30      0.62      0.41       100
+   Preparing       0.36      0.47      0.41       433
+      Sawing       0.35      0.56      0.43        45
+    Suturing       0.26      0.58      0.36        26
+    Touching       0.28      0.17      0.21       347
+        none       0.88      0.98      0.93     61266
+
+    accuracy                           0.87     82836
+   macro avg       0.50      0.58      0.50     82836
+weighted avg       0.88      0.87      0.86     82836
+
+4D-OR approach single view (camera 6): -> Oracle with camera 6 (even though this was never seen during training) will be around 0.64 vs 0.20
+              precision    recall  f1-score   support
+
+   Assisting       0.40      0.01      0.02       168
+   Cementing       0.28      0.37      0.32        27
+    Cleaning       0.16      0.04      0.06       107
+     CloseTo       0.92      0.15      0.26     18065
+     Cutting       0.00      0.00      0.00        57
+    Drilling       0.62      0.30      0.41        33
+   Hammering       0.00      0.00      0.00        44
+     Holding       0.79      0.27      0.40       910
+     LyingOn       0.95      0.29      0.44      1208
+   Operating       0.23      0.08      0.12       100
+   Preparing       0.50      0.02      0.04       433
+      Sawing       0.00      0.00      0.00        45
+    Suturing       0.15      0.08      0.10        26
+    Touching       0.03      0.02      0.02       347
+        none       0.78      1.00      0.87     61266
+
+    accuracy                           0.78     82836
+   macro avg       0.39      0.17      0.20     82836
+weighted avg       0.80      0.78      0.71     82836
+
+
+# systemiatcally eval color_switchedd in 4d-or
+              precision    recall  f1-score   support
+
+   Assisting       0.51      0.62      0.56       115
+   Cementing       0.60      0.60      0.60        10
+    Cleaning       0.40      0.77      0.53        35
+     CloseTo       0.99      0.84      0.91      8604
+     Cutting       0.52      0.57      0.55        21
+    Drilling       0.04      0.08      0.06        12
+   Hammering       0.47      0.74      0.58        31
+     Holding       0.53      0.89      0.67       432
+     LyingOn       1.00      0.99      0.99       574
+   Operating       0.62      1.00      0.77        44
+   Preparing       0.46      0.87      0.60       171
+      Sawing       0.07      0.05      0.06        20
+    Suturing       1.00      0.50      0.67         8
+    Touching       0.74      0.90      0.81       451
+        none       0.96      0.98      0.97     28882
+
+    accuracy                           0.95     39410
+   macro avg       0.59      0.69      0.62     39410
+weighted avg       0.95      0.95      0.95     39410
+# without color switching same take (8)
+              precision    recall  f1-score   support
+
+   Assisting       0.52      0.63      0.57       115
+   Cementing       0.75      0.60      0.67        10
+    Cleaning       0.40      0.74      0.52        35
+     CloseTo       0.99      0.84      0.91      8604
+     Cutting       0.52      0.76      0.62        21
+    Drilling       0.86      1.00      0.92        12
+   Hammering       0.49      0.74      0.59        31
+     Holding       0.52      0.89      0.66       432
+     LyingOn       1.00      0.99      0.99       574
+   Operating       0.59      1.00      0.75        44
+   Preparing       0.45      0.86      0.59       171
+      Sawing       0.71      0.85      0.77        20
+    Suturing       1.00      0.50      0.67         8
+    Touching       0.75      0.90      0.82       451
+        none       0.96      0.98      0.97     28882
+
+    accuracy                           0.95     39410
+   macro avg       0.70      0.82      0.73     39410
+weighted avg       0.96      0.95      0.95     39410
+
+
+# without color switching it was
+              precision    recall  f1-score   support
+
+   Assisting       0.77      0.77      0.77       115
+   Cementing       1.00      1.00      1.00        10
+    Cleaning       0.79      0.74      0.76        35
+     CloseTo       0.98      0.95      0.96      8604
+     Cutting       0.85      0.81      0.83        21
+    Drilling       0.80      1.00      0.89        12
+   Hammering       1.00      0.84      0.91        31
+     Holding       0.93      0.78      0.85       432
+     LyingOn       1.00      0.99      0.99       574
+   Operating       0.87      0.93      0.90        44
+   Preparing       0.77      0.98      0.86       171
+      Sawing       1.00      1.00      1.00        20
+    Suturing       1.00      0.62      0.77         8
+    Touching       0.88      0.93      0.91       451
+        none       0.98      0.99      0.99     28882
+
+    accuracy                           0.98     39410
+   macro avg       0.91      0.89      0.89     39410
+weighted avg       0.98      0.98      0.98     39410
+
+# Oracle multi view non symbolic receives instead:
+              precision    recall  f1-score   support
+
+   Assisting       0.77      0.77      0.77       115
+   Cementing       1.00      1.00      1.00        10
+    Cleaning       0.76      0.74      0.75        35
+     CloseTo       0.98      0.95      0.96      8604
+     Cutting       0.85      0.81      0.83        21
+    Drilling       0.00      0.00      0.00        12
+   Hammering       1.00      0.84      0.91        31
+     Holding       0.93      0.78      0.85       432
+     LyingOn       1.00      0.99      0.99       574
+   Operating       0.87      0.93      0.90        44
+   Preparing       0.77      0.98      0.86       171
+      Sawing       0.14      0.10      0.12        20
+    Suturing       1.00      0.62      0.77         8
+    Touching       0.89      0.93      0.91       451
+        none       0.98      0.99      0.99     28882
+
+    accuracy                           0.98     39410
+   macro avg       0.80      0.76      0.78     39410
+weighted avg       0.98      0.98      0.98     39410
+
+
+
+# with color switching but adjusted symbolic descs
+              precision    recall  f1-score   support
+
+   Assisting       0.84      0.64      0.73       115
+   Cementing       1.00      1.00      1.00        10
+    Cleaning       0.39      0.69      0.49        35
+     CloseTo       0.94      0.85      0.89      8604
+     Cutting       0.90      0.43      0.58        21
+    Drilling       1.00      0.33      0.50        12
+   Hammering       0.43      0.97      0.59        31
+     Holding       0.93      0.59      0.73       432
+     LyingOn       1.00      0.92      0.96       574
+   Operating       1.00      0.39      0.56        44
+   Preparing       0.76      0.81      0.78       171
+      Sawing       0.40      0.20      0.27        20
+    Suturing       0.83      0.62      0.71         8
+    Touching       0.31      0.28      0.29       451
+        none       0.94      0.97      0.96     28882
+
+    accuracy                           0.93     39410
+   macro avg       0.78      0.65      0.67     39410
+weighted avg       0.93      0.93      0.93     39410
+
+# with color switching, but adjusted symbolic descs (ALSO MERGED DATASET THIS TIME) /home/guests/ege_oezsoy/Oracle/LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_linear_weighting_symbolic_merged_mv_4views/checkpoint-16500
+              precision    recall  f1-score   support
+
+   Assisting       0.87      0.77      0.82       115
+   Cementing       1.00      0.90      0.95        10
+    Cleaning       0.71      0.69      0.70        35
+     CloseTo       0.99      0.90      0.94      8604
+     Cutting       0.65      0.71      0.68        21
+    Drilling       1.00      0.58      0.74        12
+   Hammering       0.93      0.87      0.90        31
+     Holding       0.97      0.63      0.76       432
+     LyingOn       1.00      1.00      1.00       574
+   Operating       0.87      0.93      0.90        44
+   Preparing       0.82      0.93      0.87       171
+      Sawing       0.95      0.95      0.95        20
+    Suturing       0.71      0.62      0.67         8
+    Touching       0.90      0.79      0.84       451
+        none       0.97      1.00      0.98     28882
+
+    accuracy                           0.97     39410
+   macro avg       0.89      0.82      0.85     39410
+weighted avg       0.97      0.97      0.97     39410
+
+# with color switching, but adjusted symbolic descs WITH COT (ALSO MERGED DATASET THIS TIME) /home/guests/ege_oezsoy/Oracle/LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_linear_weighting_symbolic_merged_mv_4views/checkpoint-16500
+              precision    recall  f1-score   support
+
+   Assisting       0.88      0.79      0.83       115
+   Cementing       1.00      1.00      1.00        10
+    Cleaning       0.73      0.69      0.71        35
+     CloseTo       0.99      0.92      0.96      8604
+     Cutting       0.72      0.86      0.78        21
+    Drilling       1.00      0.83      0.91        12
+   Hammering       0.79      0.87      0.83        31
+     Holding       0.97      0.59      0.74       432
+     LyingOn       1.00      1.00      1.00       574
+   Operating       0.93      0.91      0.92        44
+   Preparing       0.83      0.92      0.87       171
+      Sawing       0.62      0.65      0.63        20
+    Suturing       0.78      0.88      0.82         8
+    Touching       0.91      0.90      0.90       451
+        none       0.97      1.00      0.98     28882
+
+    accuracy                           0.97     39410
+   macro avg       0.87      0.85      0.86     39410
+weighted avg       0.97      0.97      0.97     39410
+
+
+# with color switching, WITH VISUAL PROMPTS
+              precision    recall  f1-score   support
+
+   Assisting       0.78      0.84      0.81       115
+   Cementing       1.00      0.70      0.82        10
+    Cleaning       0.56      0.83      0.67        35
+     CloseTo       0.97      0.94      0.95      8604
+     Cutting       0.94      0.71      0.81        21
+    Drilling       0.80      0.67      0.73        12
+   Hammering       0.96      0.74      0.84        31
+     Holding       0.91      0.78      0.84       432
+     LyingOn       1.00      0.99      1.00       574
+   Operating       0.97      0.73      0.83        44
+   Preparing       0.78      0.85      0.82       171
+      Sawing       0.71      1.00      0.83        20
+    Suturing       0.80      0.50      0.62         8
+    Touching       0.91      0.92      0.92       451
+        none       0.98      0.99      0.98     28882
+
+    accuracy                           0.97     39410
+   macro avg       0.87      0.81      0.83     39410
+weighted avg       0.97      0.97      0.97     39410
+
+
+
+
+4D-OR approach green_drill:
+00 = {tuple: 3} ('anesthesia_equipment', 'CloseTo', 'human_0')
+01 = {tuple: 3} ('anesthesia_equipment', 'CloseTo', 'operating_table')
+02 = {tuple: 3} ('human_0', 'CloseTo', 'anesthesia_equipment')
+03 = {tuple: 3} ('human_0', 'CloseTo', 'human_1')
+04 = {tuple: 3} ('human_0', 'CloseTo', 'human_3')
+05 = {tuple: 3} ('human_0', 'LyingOn', 'operating_table')
+06 = {tuple: 3} ('human_1', 'Sawing', 'human_0')
+07 = {tuple: 3} ('human_1', 'Holding', 'instrument')
+08 = {tuple: 3} ('human_1', 'CloseTo', 'operating_table')
+09 = {tuple: 3} ('human_2', 'Holding', 'instrument')
+10 = {tuple: 3} ('human_2', 'Touching', 'secondary_table')
+11 = {tuple: 3} ('human_3', 'CloseTo', 'human_0')
+12 = {tuple: 3} ('human_3', 'CloseTo', 'instrument_table')
+13 = {tuple: 3} ('human_3', 'CloseTo', 'operating_table')
+14 = {tuple: 3} ('instrument', 'CloseTo', 'human_1')
+15 = {tuple: 3} ('instrument_table', 'CloseTo', 'human_3')
+16 = {tuple: 3} ('operating_table', 'CloseTo', 'anesthesia_equipment')
+17 = {tuple: 3} ('operating_table', 'CloseTo', 'human_0')
+18 = {tuple: 3} ('operating_table', 'CloseTo', 'human_1')
+19 = {tuple: 3} ('operating_table', 'CloseTo', 'human_3')
+20 = {tuple: 3} ('secondary_table', 'CloseTo', 'human_2')
+4D-OR approach blue_dril:
+00 = {tuple: 3} ('anesthesia_equipment', 'CloseTo', 'human_0')
+01 = {tuple: 3} ('anesthesia_equipment', 'CloseTo', 'operating_table')
+02 = {tuple: 3} ('human_0', 'CloseTo', 'anesthesia_equipment')
+03 = {tuple: 3} ('human_0', 'CloseTo', 'human_1')
+04 = {tuple: 3} ('human_0', 'CloseTo', 'human_3')
+05 = {tuple: 3} ('human_0', 'LyingOn', 'operating_table')
+06 = {tuple: 3} ('human_1', 'Sawing', 'human_0')
+07 = {tuple: 3} ('human_1', 'Holding', 'instrument')
+08 = {tuple: 3} ('human_1', 'CloseTo', 'operating_table')
+09 = {tuple: 3} ('human_2', 'Holding', 'instrument')
+10 = {tuple: 3} ('human_2', 'Touching', 'secondary_table')
+11 = {tuple: 3} ('human_3', 'CloseTo', 'human_0')
+12 = {tuple: 3} ('human_3', 'CloseTo', 'instrument_table')
+13 = {tuple: 3} ('human_3', 'CloseTo', 'operating_table')
+14 = {tuple: 3} ('instrument', 'CloseTo', 'human_1')
+15 = {tuple: 3} ('instrument_table', 'CloseTo', 'human_3')
+16 = {tuple: 3} ('operating_table', 'CloseTo', 'anesthesia_equipment')
+17 = {tuple: 3} ('operating_table', 'CloseTo', 'human_0')
+18 = {tuple: 3} ('operating_table', 'CloseTo', 'human_1')
+19 = {tuple: 3} ('operating_table', 'CloseTo', 'human_3')
+20 = {tuple: 3} ('secondary_table', 'CloseTo', 'human_2')
+
+4D-OR approach orange_saw:
+00 = {tuple: 3} ('anesthesia_equipment', 'CloseTo', 'human_0')
+01 = {tuple: 3} ('anesthesia_equipment', 'CloseTo', 'operating_table')
+02 = {tuple: 3} ('human_0', 'CloseTo', 'anesthesia_equipment')
+03 = {tuple: 3} ('human_0', 'CloseTo', 'human_1')
+04 = {tuple: 3} ('human_0', 'LyingOn', 'operating_table')
+05 = {tuple: 3} ('human_1', 'Sawing', 'human_0')
+06 = {tuple: 3} ('human_1', 'Holding', 'instrument')
+07 = {tuple: 3} ('human_1', 'CloseTo', 'operating_table')
+08 = {tuple: 3} ('human_2', 'Touching', 'secondary_table')
+09 = {tuple: 3} ('instrument', 'CloseTo', 'human_1')
+10 = {tuple: 3} ('operating_table', 'CloseTo', 'anesthesia_equipment')
+11 = {tuple: 3} ('operating_table', 'CloseTo', 'human_0')
+12 = {tuple: 3} ('operating_table', 'Assisting', 'human_1')
+13 = {tuple: 3} ('secondary_table', 'CloseTo', 'human_2')
