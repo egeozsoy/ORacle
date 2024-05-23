@@ -13,7 +13,7 @@ from LLaVA.llava.model.builder import load_pretrained_model
 from scene_graph_prediction.llava_helpers.descriptors import ENTITY_SYMBOLS, PREDICATE_SYMBOLS, ENTITY_DESCRIPTORS, PREDICATE_DESCRIPTORS
 
 
-class AdverserialOracleWrapper:
+class AdaptabilityOracleWrapper:
     def __init__(self, config, labels, model_path, model_base='liuhaotian/llava-v1.5-7b', load_8bit=False, load_4bit=False):
         self.config = config
         self.mconfig = config['MODEL']
@@ -26,13 +26,13 @@ class AdverserialOracleWrapper:
 
         if self.config['USE_VIS_DESC']:
             self.vis_knowledge_paths = {
-                'anesthesia equipment': 'data/original_crops/anesthesia equipment_take1.pt',
-                'cementing': 'data/original_crops/cementing_take1.pt',
-                'cutting': 'data/original_crops/cutting_take1.pt',
-                'drilling': 'data/original_crops/drilling_take1.pt',  # 'data/original_crops/test_crops/green_drill_crop.pt',
-                'hammering': 'data/original_crops/hammering_take1.pt',
-                'sawing': 'data/original_crops/sawing_take1.pt',  # 'data/original_crops/test_crops/orange_saw_crop.pt'
-                'suturing': 'data/original_crops/suturing_take1.pt'
+                'anesthesia equipment': 'synthetic_or_generation/original_crops/anesthesia equipment_cam2.pt',
+                'cementing': 'synthetic_or_generation/original_crops/cementing_cam2.pt',
+                'cutting': 'synthetic_or_generation/original_crops/cutting_cam2.pt',
+                'drilling': 'synthetic_or_generation/original_crops/drilling_cam2.pt',
+                'hammering': 'synthetic_or_generation/original_crops/hammering_cam2.pt',
+                'sawing': 'synthetic_or_generation/original_crops/sawing_cam2.pt',
+                'suturing': 'synthetic_or_generation/original_crops/suturing_cam2.pt'
             }
 
             self.vis_descriptor_embs = {}
@@ -52,30 +52,35 @@ class AdverserialOracleWrapper:
         predicate_symbols = PREDICATE_SYMBOLS.copy()
         entity_descriptors = ENTITY_DESCRIPTORS.copy()
         predicate_descriptors = PREDICATE_DESCRIPTORS.copy()
+        is_vis = 'USE_VIS_DESC' in self.config and self.config['USE_VIS_DESC']
 
         # define which entities and predicates from original objects are visual prompts
-        visual_entities = ["anesthesia equipment"]
-        visual_predicates = ["cementing", "cutting", "drilling", "hammering", "sawing", "suturing"]
+        if is_vis:
+            visual_entities = ["anesthesia equipment"]
+            visual_predicates = ["cementing", "cutting", "drilling", "hammering", "sawing", "suturing"]
 
-        # change descriptors of visual prompts
-        for entity in visual_entities:
-            entity_descriptors[entity] = [f'{VIS_DESCRIPTOR_TOKEN}.']
-        for predicate in visual_predicates:
-            predicate_descriptors[predicate] = [f'use of a tool: {VIS_DESCRIPTOR_TOKEN}.']
+            # change descriptors of visual prompts
+            for entity in visual_entities:
+                entity_descriptors[entity] = [f'{VIS_DESCRIPTOR_TOKEN}.']
+            for predicate in visual_predicates:
+                predicate_descriptors[predicate] = [f'use of a tool: {VIS_DESCRIPTOR_TOKEN}.']
 
-        # adding any new entities with corresponding descriptions, or overwriting existing ones. Same for predicates. The rest is automatically handled.
-        vis_knowledge_paths_copy = deepcopy(self.vis_knowledge_paths)
+            # adding any new entities with corresponding descriptions, or overwriting existing ones. Same for predicates. The rest is automatically handled.
+            vis_knowledge_paths_copy = deepcopy(self.vis_knowledge_paths)
+
         for name, descriptor, type, vis_desc_path in customizations:
             if type == 'e':
                 entity_descriptors[name] = [descriptor]
-                if name not in visual_entities:
-                    visual_entities.append(name)
-                vis_knowledge_paths_copy[name] = str(vis_desc_path).replace(".jpg", "_crop.pt")
+                if is_vis:
+                    if name not in visual_entities:
+                        visual_entities.append(name)
+                    vis_knowledge_paths_copy[name] = str(vis_desc_path).replace(".jpg", "_crop.pt")
             elif type == 'p':
                 predicate_descriptors[name] = [descriptor]
-                if name not in visual_predicates:
-                    visual_predicates.append(name)
-                vis_knowledge_paths_copy[name] = str(vis_desc_path).replace(".jpg", "_crop.pt")
+                if is_vis:
+                    if name not in visual_predicates:
+                        visual_predicates.append(name)
+                    vis_knowledge_paths_copy[name] = str(vis_desc_path).replace(".jpg", "_crop.pt")
             else:
                 raise NotImplementedError()
 
@@ -83,13 +88,15 @@ class AdverserialOracleWrapper:
         for entity_name, descriptors in entity_descriptors.items():
             entity_name_to_symbol[entity_name] = entity_symbols.pop(0)
             entity_symbol_to_descriptor[entity_name_to_symbol[entity_name]] = descriptors[0]
-            if entity_name in visual_entities:
-                sym_to_descriptor_paths[entity_name_to_symbol[entity_name]] = vis_knowledge_paths_copy[entity_name]
+            if is_vis:
+                if entity_name in visual_entities:
+                    sym_to_descriptor_paths[entity_name_to_symbol[entity_name]] = vis_knowledge_paths_copy[entity_name]
         for predicate_name, descriptors in predicate_descriptors.items():
             predicate_name_to_symbol[predicate_name] = predicate_symbols.pop(0)
             predicate_symbol_to_descriptor[predicate_name_to_symbol[predicate_name]] = descriptors[0]
-            if predicate_name in visual_predicates:
-                sym_to_descriptor_paths[predicate_name_to_symbol[predicate_name]] = vis_knowledge_paths_copy[predicate_name]
+            if is_vis:
+                if predicate_name in visual_predicates:
+                    sym_to_descriptor_paths[predicate_name_to_symbol[predicate_name]] = vis_knowledge_paths_copy[predicate_name]
 
         entity_symbol_to_descriptor_sorted = sorted(entity_symbol_to_descriptor.items(), key=lambda x: x[0])
         predicate_symbol_to_descriptor_sorted = sorted(predicate_symbol_to_descriptor.items(), key=lambda x: x[0])
@@ -97,15 +104,17 @@ class AdverserialOracleWrapper:
         predicate_symbols = ", ".join([elem[0] for elem in predicate_symbol_to_descriptor_sorted])
         human_prompt = f'Entities: [{entity_symbols}]. Predicates: [{predicate_symbols}]. <knowledge_start> '
 
-        vis_knowledge_paths = []  # fill in correct order
+        vis_knowledge_paths = [] if is_vis else None
         for entity_symbol, descriptor in entity_symbol_to_descriptor_sorted:
             human_prompt += f'{entity_symbol}: {descriptor} '
-            if entity_symbol in sym_to_descriptor_paths:
-                vis_knowledge_paths.append(sym_to_descriptor_paths[entity_symbol])
+            if is_vis:
+                if entity_symbol in sym_to_descriptor_paths:
+                    vis_knowledge_paths.append(sym_to_descriptor_paths[entity_symbol])
         for predicate_symbol, descriptor in predicate_symbol_to_descriptor_sorted:
             human_prompt += f'{predicate_symbol}: {descriptor} '
-            if predicate_symbol in sym_to_descriptor_paths:
-                vis_knowledge_paths.append(sym_to_descriptor_paths[predicate_symbol])
+            if is_vis:
+                if predicate_symbol in sym_to_descriptor_paths:
+                    vis_knowledge_paths.append(sym_to_descriptor_paths[predicate_symbol])
         human_prompt += f'<knowledge_end> Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
 
         return human_prompt, entity_name_to_symbol, predicate_name_to_symbol, vis_knowledge_paths
@@ -140,7 +149,7 @@ class AdverserialOracleWrapper:
                 raise NotImplementedError(label)
 
             inp, entity_name_to_symbol, predicate_name_to_symbol, vis_knowledge_paths = self._symbolic_prompt_maker(customizations)
-        elif '_symbolic' in self.model_name:
+        elif '_symbolic' in self.model_name or '_synthetic' in self.model_name:
             textual_str = f'{textual_attributes["color"]}, {textual_attributes["size"]}, {textual_attributes["shape"]}, {textual_attributes["texture"]}, {textual_attributes["object_type"]}.'
             if label in ['cementing', 'cutting', 'drilling', 'hammering', 'robotic_sawing', 'sawing', 'suturing']:
                 if label == 'robotic_sawing':
@@ -151,7 +160,6 @@ class AdverserialOracleWrapper:
             else:
                 raise NotImplementedError(label)
             inp, entity_name_to_symbol, predicate_name_to_symbol, vis_knowledge_paths = self._symbolic_prompt_maker(customizations)
-            vis_knowledge_paths = None
         else:
             inp = 'Entities: [head surgeon, assistant surgeon, circulator, nurse, anaesthetist, patient, instrument table, operating table, secondary table, anesthesia equipment, instrument]. Predicates: [assisting, cementing, cleaning, closeTo, cutting, drilling, hammering, holding, lyingOn, manipulating, preparing, sawing, suturing, touching]. Given the following scene graph memory representation, generate a scene graph for timepoint T. The output should strictly be a list of triplets, each in the format "entity1,entity2,predicate;". Do not provide a narrative or descriptive text.'
             vis_knowledge_paths = None
@@ -195,7 +203,7 @@ class AdverserialOracleWrapper:
             )
         outputs = [self.tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()]
 
-        if '_symbolic' in self.model_name or self.config['USE_VIS_DESC']:
+        if '_symbolic' in self.model_name or '_synthetic' in self.model_name or self.config['USE_VIS_DESC']:
             symbolic_parsed = []
 
             replace_map = {symbol: name for name, symbol in entity_name_to_symbol.items() | predicate_name_to_symbol.items()}

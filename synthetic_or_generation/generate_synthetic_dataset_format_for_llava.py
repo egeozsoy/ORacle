@@ -1,9 +1,13 @@
+import argparse
 import random
 import warnings
 from collections import Counter, defaultdict
 from copy import deepcopy
+from pathlib import Path
 from random import shuffle
 
+import json_tricks as json  # Allows to load integers etc. correctly
+import pytorch_lightning as pl
 import transformers
 from tqdm import tqdm
 
@@ -11,11 +15,6 @@ from scene_graph_prediction.llava_helpers.descriptors import ENTITY_DESCRIPTORS_
 from synthetic_or_generation.generate_novel_augmentations import replacement_map, EQUIPMENT, INSTRUMENTS
 
 warnings.filterwarnings('ignore')
-import argparse
-from pathlib import Path
-
-import json_tricks as json  # Allows to load integers etc. correctly
-import pytorch_lightning as pl
 
 
 def scene_graph_to_string(scene_graph, SYMBOLIC_SG_MAP=None):
@@ -314,7 +313,7 @@ def main():
         use_fast=False,
     )
     if len(views_to_use) > 1:
-        dataset_path = Path('/home/guests/shared/Oracle/synthetic_4D-OR_mv')
+        dataset_path = Path('synthetic_4D-OR_mv')
     else:
         dataset_path = Path('synthetic_or_generation/synthetic_4D-OR')
 
@@ -337,23 +336,6 @@ def main():
     with open(f'data/llava_samples/{NAME}.json', 'w') as f:
         json.dump(samples, f, indent=4)
 
-    if SPLIT == 'train':
-        if SYMBOLIC_SG:
-            with open(f'data/llava_samples/train_token_freqs_7b_symbolic_synthetic.json', 'w') as f:
-                json.dump(token_freq, f, indent=4)
-        else:
-            with open(f'data/llava_samples/train_token_freqs_7b_perm_synthetic.json', 'w') as f:
-                json.dump(token_freq, f, indent=4)
-
 
 if __name__ == '__main__':
-    """format of json (ultimately):
-    1) id
-    2) image(s) paths
-    3) Prompt (formulately in multiple ways)
-    4) Answer (formulately in multiple ways) (multiple orders)
-    5) Prompt should include knowledge about different things
-    
-    Optionally: include augmentations, modifications in scene graph, prompt or both etc.
-    """
     main()

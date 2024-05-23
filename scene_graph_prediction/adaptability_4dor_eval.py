@@ -11,11 +11,10 @@ from pathlib import Path
 
 import json_tricks as json  # Allows to load integers etc. correctly
 import pytorch_lightning as pl
-import torch
 from torch.utils.data import DataLoader
 
-from scene_graph_prediction.scene_graph_helpers.dataset.adverserial_or_dataset import AdverserialORDataset
-from scene_graph_prediction.scene_graph_helpers.model.adverserial_wrapper_oracle import AdverserialOracleWrapper
+from scene_graph_prediction.scene_graph_helpers.dataset.adaptability_or_dataset import AdaptabilityORDataset
+from scene_graph_prediction.scene_graph_helpers.model.adaptability_wrapper_oracle import AdaptabilityOracleWrapper
 
 
 def config_loader(config_path: str):
@@ -53,9 +52,9 @@ def main():
     config = config_loader(args.config)
 
     print(f'Model path: {args.model_path}')
-    eval_dataset = AdverserialORDataset(config)
+    eval_dataset = AdaptabilityORDataset(config)
     eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True, collate_fn=lambda x: x)  # config['NUM_WORKERS']
-    model = AdverserialOracleWrapper(config, labels=eval_dataset.labels, model_path=args.model_path)
+    model = AdaptabilityOracleWrapper(config, labels=eval_dataset.labels, model_path=args.model_path)
     model.validate(eval_loader)
 
 

@@ -51,6 +51,6 @@
     "image_res": 0,
     "class_choice": [],
     "max_edges": -1,
-    "DATASET_SUFFIX": "_pl"
+    "DATASET_SUFFIX": ""
   }
 }

@@ -13,7 +13,7 @@ from LLaVA.llava.model.builder import load_pretrained_model
 
 class ImageDataset(Dataset):
     def __init__(self, img_path, use_aug, num_aug=100):
-        self.image_paths = [os.path.join(img_path, fname) for fname in os.listdir(img_path) if fname.endswith('.jpg') and 'cam2' in fname]
+        self.image_paths = [os.path.join(img_path, fname) for fname in os.listdir(img_path) if fname.endswith('.jpg')]
         self.use_aug = use_aug
         self.num_aug = num_aug
         self.transforms = transforms.Compose([
@@ -61,14 +61,44 @@ if __name__ == '__main__':
     tokenizer, model, image_processor, context_len = load_pretrained_model(model_path, model_base=None, model_name=model_name, load_8bit=False, load_4bit=False)
     model = model.to(torch.float16)
 
-    USE_AUG = True
-    img_path = "data/original_crops/"
-    # img_path = "synthetic_or_generation/vis_descriptors/"
     batch_size = 100
 
-    # Create Dataset and DataLoader
-    dataset = ImageDataset(img_path, USE_AUG)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, collate_fn=custom_collate_fn)
+    # Create Dataset and DataLoader. For original dataset
+    img_path = "synthetic_or_generation/original_crops/"
+    dataset = ImageDataset(img_path=img_path, use_aug=False)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, collate_fn=custom_collate_fn)
+
+    for batch_images, batch_paths in tqdm(dataloader):
+        img_batch = process_images(batch_images, image_processor, model.config)
+
+        # Extract features
+        img_batch = img_batch.to(torch.float16)
+        image_features_batch = process_and_extract_features(img_batch, model, image_processor)
+
+        # Save features for each image in the batch
+        for j, image_feature in enumerate(image_features_batch):
+            torch.save(image_feature, img_path + batch_paths[j])
+
+    # Create Dataset and DataLoader. For original dataset
+    img_path = "synthetic_or_generation/original_crops/"
+    dataset = ImageDataset(img_path=img_path, use_aug=True, num_aug=100)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, collate_fn=custom_collate_fn)
+
+    for batch_images, batch_paths in tqdm(dataloader):
+        img_batch = process_images(batch_images, image_processor, model.config)
+
+        # Extract features
+        img_batch = img_batch.to(torch.float16)
+        image_features_batch = process_and_extract_features(img_batch, model, image_processor)
+
+        # Save features for each image in the batch
+        for j, image_feature in enumerate(image_features_batch):
+            torch.save(image_feature, img_path + batch_paths[j])
+
+    # Create Dataset and DataLoader. For synthetic dataset
+    img_path = "synthetic_or_generation/vis_descriptors/"
+    dataset = ImageDataset(img_path=img_path, use_aug=True, num_aug=10)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=12, collate_fn=custom_collate_fn)
 
     for batch_images, batch_paths in tqdm(dataloader):
         img_batch = process_images(batch_images, image_processor, model.config)

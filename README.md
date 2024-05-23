@@ -1,19 +1,83 @@
-# ORacle
+# ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling
 
-Official code of the paper ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling accepted at MICCAI 2024.
+<img align="right" src="figures/teaser.jpg" alt="teaser" width="30%" style="margin-left: 10px">
+Official code of the paper ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling accepted at MICCAI 2024 (https://arxiv.org/abs/2404.07031). Every day, countless surgeries are performed worldwide, each within the distinct settings of operating rooms (ORs) that vary not only in their setups but also in the personnel, tools, and equipment used. 
+This inherent diversity poses a substantial challenge for achieving a holistic understanding of the OR, as it requires models to generalize beyond their initial training datasets. 
+To reduce this gap, we introduce ORacle, an advanced vision-language model designed for holistic OR domain modeling, which incorporates multi-view and temporal capabilities and can leverage external knowledge during inference, enabling it to adapt to previously unseen surgical scenarios. 
+This capability is further enhanced by our novel data augmentation framework, which significantly diversifies the training dataset, ensuring ORacle's proficiency in applying the provided knowledge effectively. 
+In rigorous testing, in scene graph generation, and downstream tasks on the 4D-OR dataset, ORacle not only demonstrates state-of-the-art performance but does so requiring less data than existing models. 
+Furthermore, its adaptability is displayed through its ability to interpret unseen views, actions, and appearances of tools and equipment. 
+This demonstrates ORacle's potential to significantly enhance the scalability and affordability of OR domain modeling and opens a pathway for future advancements in surgical data science.
+
+PDF Paper: To be added after it is published
+PDF Book: To be added after it is published
+
+**Authors**: [Ege Özsoy][eo]\*, [Chantal Pellegrini][cp]\*, [Matthias Keicher][mk], [Nassir Navab][nassir]
+
+[eo]:https://www.cs.cit.tum.de/camp/members/ege-oezsoy/
+
+[cp]:https://www.cs.cit.tum.de/camp/members/chantal-pellegrini/
+
+[mk]:https://www.cs.cit.tum.de/camp/members/matthias-keicher/
+
+[nassir]:https://www.cs.cit.tum.de/camp/members/cv-nassir-navab/nassir-navab/
+
+```
+@article{ozsoy2024oracle,
+  title={ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling},
+  author={{\"O}zsoy, Ege and Pellegrini, Chantal and Keicher, Matthias and Navab, Nassir},
+  journal={arXiv preprint arXiv:2404.07031},
+  year={2024}
+}
+
+@inproceedings{Özsoy2023_LABRAD_OR,
+    title={LABRAD-OR: Lightweight Memory Scene Graphs for Accurate Bimodal Reasoning in Dynamic Operating Rooms},
+    author={Ege Özsoy, Tobias Czempiel, Felix Holm, Chantal Pellegrini, Nassir Navab},
+    booktitle={International Conference on Medical Image Computing and Computer-Assisted Intervention},
+    year={2023},
+    organization={Springer}
+}
+@Article{Özsoy2023,
+author={{\"O}zsoy, Ege
+and Czempiel, Tobias
+and {\"O}rnek, Evin P{\i}nar
+and Eck, Ulrich
+and Tombari, Federico
+and Navab, Nassir},
+title={Holistic OR domain modeling: a semantic scene graph approach},
+journal={International Journal of Computer Assisted Radiology and Surgery},
+year={2023},
+doi={10.1007/s11548-023-03022-w},
+url={https://doi.org/10.1007/s11548-023-03022-w}
+}
+@inproceedings{Özsoy2022_4D_OR,
+    title={4D-OR: Semantic Scene Graphs for OR Domain Modeling},
+    author={Ege Özsoy, Evin Pınar Örnek, Ulrich Eck, Tobias Czempiel, Federico Tombari, Nassir Navab},
+    booktitle={International Conference on Medical Image Computing and Computer-Assisted Intervention},
+    year={2022},
+    organization={Springer}
+}
+@inproceedings{Özsoy2021_MSSG,
+    title={Multimodal Semantic Scene Graphs for Holistic Modeling of Surgical Procedures},
+    author={Ege Özsoy, Evin Pınar Örnek, Ulrich Eck, Federico Tombari, Nassir Navab},
+    booktitle={Arxiv},
+    year={2021}
+}
+```
 
 ## What is not included in this repository?
 
 The 4D-OR Dataset itself, is not included in this project, please refer to [4D-OR](https://github.com/egeozsoy/4D-OR) repository for information on downloading the dataset. The rest of this README
 assumes the 4D-OR repository is located in the same folder as the root project. You can modify this in: helpers/configurations.py OR_4D_DATA_ROOT_PATH
 
-TODO adversarial_4dor should not be part of repo but made available. (on huggingface)
+TODO original crops for visual
 
 ## Installation
 
 - Run `pip install -r requirements.txt`.
 - cd instal LLaVA then run `pip install -e .` to install the correct version of the LLaVA library.
 - Potentially you need to explicitly install flash-attn like `pip install flash-attn --no-build-isolation`
+- If you need to download any file, data, model weight etc., they are likely located at https://huggingface.co/egeozsoy/ORacle/tree/main
 
 ## Data Generation for LVLM Training
 
@@ -30,8 +94,11 @@ TODO adversarial_4dor should not be part of repo but made available. (on hugging
   run as much as you desire, we suggest at least 100000.
 - After the entities are generated, it is advisable to prune the ones that do not look meaningful, to this end use `python -m synthetic_or_generation.prune_novel_entities`
 - Now you can generate the synthetic dataset by running `python -m synthetic_or_generation.generate_novel_augmentations`
-- TODO generate jsons
-- TODO visual descriptor data generation
+- Finally, you can run `python -m synthetic_or_generation.generate_synthetic_dataset_format_for_llava` to generate the jsons for training.
+- If you want to use visual descriptors instead of textual descriptors, you first need to generate those by running `python -m synthetic_or_generation.generate_vis_descriptors`
+- Next run `python -m synthetic_or_generation.embed_visual_prompts` to convert the visual prompts into pytorch tensors and augment them at the same time. Make sure to download and copy
+  original_crops.zip to the correct folder and unzip it.
+- Now run `python -m synthetic_or_generation.generate_synthetic_vis_descriptor_dataset_format_for_llava` to generate the jsons for training with visual descriptors.
 
 ## Training
 
@@ -41,9 +108,8 @@ TODO adversarial_4dor should not be part of repo but made available. (on hugging
   path to your previously experted training json path). Furthermore, you need to modify LLaVA.llava.train.llava_trainer.py at the top, to correctly load the token_frequencies.
 - To train our temporal model, we prefer to use curriculum learning, starting from the base model. To this, you have to already do the previous step. Afterwards, you can
   run `slurm_config_multiview_temporal_curriculum.conf`. (you will again need to adapt the paths)
-- To train our symbolic model, . Make sure to set token frequencies to None in LLaVA.llava.train.llava_trainer.py.
-- To train our symbolic model with visual prompts,
-- TODO How to input textual or visual prompts
+- To train our symbolic model, run `slurm_config_multiview_symbolic`. Make sure to set token frequencies to None in LLaVA.llava.train.llava_trainer.py.
+- To train our symbolic model with visual prompts, run `slurm_config_multiview_symbolic_visual`. Make sure to set token frequencies to None in LLaVA.llava.train.llava_trainer.py.
 
 ## Evaluation
 

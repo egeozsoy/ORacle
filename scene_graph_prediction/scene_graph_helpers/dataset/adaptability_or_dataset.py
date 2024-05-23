@@ -4,10 +4,10 @@ from pathlib import Path
 from torch.utils.data import Dataset
 
 
-class AdverserialORDataset(Dataset):
+class AdaptabilityORDataset(Dataset):
     def __init__(self,
                  config,
-                 root_path='adverserial_4dor'):
+                 root_path='adaptability_4dor'):
 
         self.config = config
         self.root_path = Path(root_path)

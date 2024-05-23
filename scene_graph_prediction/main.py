@@ -51,7 +51,7 @@ def main():
     args = parser.parse_args()
     pl.seed_everything(42, workers=True)
     config = config_loader(args.config)
-    mode = 'eval_all'  # can be evaluate/infer/eval_all
+    mode = 'evaluate'  # can be evaluate/infer/eval_all # TODO switch to eval_all for evaluation of all the checkpoints, and infer for inference
     mv_desc = False
     shuffle = True
     batch_size = 8
@@ -69,7 +69,7 @@ def main():
         # eval_dataset = ORDataset(config, 'train')
         eval_loader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False, num_workers=config['NUM_WORKERS'], pin_memory=True,
                                  collate_fn=eval_dataset.collate_fn)
-        model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),  # TODO if using llava 1.6, this needs to be updated
+        model = OracleWrapper(config, num_class=len(eval_dataset.classNames), num_rel=len(eval_dataset.relationNames),
                               weights_obj=train_dataset.w_cls_obj,
                               weights_rel=train_dataset.w_cls_rel, relationNames=train_dataset.relationNames,
                               model_path=args.model_path, mv_desc=mv_desc)
@@ -150,39 +150,6 @@ def main():
 
 
 if __name__ == '__main__':
-    '''
-    Models:
-    Single View: llava-v1.5-7b-task-lora_4dor_qlora_linear_weighting_20perm_12unfreeze_lowerlr_doublesg
-    Single View Temporal(ignore): llava-v1.5-7b-task-lora_linear_weighting_50perm_12unfreeze_history_longshort_notimepoints_drophistory05
-    Single View Temporal Curriculum (better): llava-v1.5-7b-task-lora_linear_weighting_50perm_12unfreeze_history_longshort_notimepoints_drophistory05_curriculum
-    Multi View: llava-v1.5-7b-task-lora_4dor_qlora_log_weighting_50perm_4_view_12unfreeze_learned_2135_orderaug_image
-    Multi View Temporal: llava-v1.5-7b-task-lora_4dor_qlora_log_weighting_100perm_4_view_2135_orderaug_history_longshort_notimepoints_drophistory05
-    Multi View Temporal Curriculum(better): llava-v1.5-7b-task-lora_4dor_qlora_log_weighting_100perm_4_view_2135_orderaug_history_longshort_notimepoints_drophistory05_curriculum
-    
-    Symbolic (Robustness & Generalization)
-    Textual Prompting:
-    llava-v1.5-7b-task-lora_4dor_qlora_no_weighting_symbolic_synthetic_easier (no cot, no fake attributes)
-    
-    Visual Prompting:
-    
-    Specialty:
-    llava-v1.5-7b-task-lora_4dor_qlora_linear_weighting_symbolic_mv_4views_withoutdrilling
-    llava-v1.5-7b-task-lora_4dor_qlora_linear_weighting_symbolic_mv_4views_withoutsawing
-    
-    Ablation:
-    llava-v1.5-7b-task-lora_4dor_qlora_log_weighting_100perm_4_view_12unfreeze_learned_2135_noorderaug
-    
-    
-    merged_mv_4_views works with green drill: llava-v1.5-7b-task-lora_4dor_qlora_linear_weighting_symbolic_merged_mv_4views_checkpoint-11000
-    also llava-v1.5-7b-task-lora_4dor_qlora_no_weighting_symbolic_synthetic_easier_checkpoint 11000 can drilling and MAKO
-    Lesssongs learned
-    NO WEIGHING FOR SYMBOLIC MODELS!!!
-    Curriculum learnings works, stick to it
-    augment with strength 1.0 looks to be helping a bit. (I mean without remporality max becomes 86 -> 89.5)
-    Linear really seems to be better, but we can test log one more time at the end.
-    TODO LLaVA-1.6	Mistral-7B? larger scales
-    TODO DINOv2 might be significantly better than CLIP
-    '''
     # Cleanup helper: rm -rf */checkpoint-*/global_step*
     import subprocess
 

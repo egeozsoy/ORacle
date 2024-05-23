@@ -1,11 +1,8 @@
 import os
 
-import torch
-
-import numpy as np
-from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import torch
+from sklearn.decomposition import PCA
 
 if __name__ == '__main__':
     drilling_crops = []
@@ -15,7 +12,7 @@ if __name__ == '__main__':
     for fname in os.listdir('data/original_crops/crops_for_embs'):
         if not fname.endswith('.pt'):
             continue
-        emb = torch.load(os.path.join('data/original_crops/crops_for_embs', fname))
+        emb = torch.load(os.path.join('synthetic_or_generation/original_crops/crops_for_embs', fname))
         if 'drill' in fname:
             drilling_crops.append(emb)
         elif 'saw' in fname:

@@ -64,46 +64,15 @@ class ORDataset(Dataset):
             self.image_transform_post = T.Compose(self.full_image_transformations.transforms[2:])
 
         if self.config['USE_VIS_DESC']:
-            if not mv_desc:
-                self.vis_knowledge_paths = [
-                    'data/original_crops/anesthesia equipment_take1.pt',
-                    'data/original_crops/cementing_take1.pt',
-                    'data/original_crops/cutting_take1.pt',
-                    'data/original_crops/drilling_take1.pt',
-                    'data/original_crops/hammering_take1.pt',
-                    'data/original_crops/sawing_take1.pt',
-                    'data/original_crops/suturing_take1.pt'
-                ]
-
-            else:
-                self.vis_knowledge_paths = [
-                    'data/original_crops/anesthesia equipment_cam2.pt',
-                    'data/original_crops/anesthesia equipment_cam1.pt',
-                    'data/original_crops/anesthesia equipment_cam3.pt',
-                    'data/original_crops/anesthesia equipment_cam5.pt',
-                    'data/original_crops/cementing_cam2.pt',
-                    'data/original_crops/cementing_cam1.pt',
-                    'data/original_crops/cementing_cam3.pt',
-                    'data/original_crops/cementing_cam5.pt',
-                    'data/original_crops/cutting_cam2.pt',
-                    'data/original_crops/cutting_cam1.pt',
-                    'data/original_crops/cutting_cam5.pt',
-                    'data/original_crops/drilling_cam2.pt',
-                    'data/original_crops/drilling_cam1.pt',
-                    'data/original_crops/drilling_cam3.pt',
-                    'data/original_crops/drilling_cam5.pt',
-                    'data/original_crops/hammering_cam2.pt',
-                    'data/original_crops/hammering_cam1.pt',
-                    'data/original_crops/hammering_cam3.pt',
-                    'data/original_crops/hammering_cam5.pt',
-                    'data/original_crops/sawing_cam2.pt',
-                    'data/original_crops/sawing_cam1.pt',
-                    'data/original_crops/sawing_cam3.pt',
-                    'data/original_crops/sawing_cam5.pt',
-                    'data/original_crops/suturing_cam2.pt',
-                    'data/original_crops/suturing_cam1.pt',
-                    'data/original_crops/suturing_cam5.pt'
-                ]
+            self.vis_knowledge_paths = [
+                'synthetic_or_generation/original_crops/anesthesia equipment_cam2.pt',
+                'synthetic_or_generation/original_crops/cementing_cam2.pt',
+                'synthetic_or_generation/original_crops/cutting_cam2.pt',
+                'synthetic_or_generation/original_crops/drilling_cam2.pt',
+                'synthetic_or_generation/original_crops/hammering_cam2.pt',
+                'synthetic_or_generation/original_crops/sawing_cam2.pt',
+                'synthetic_or_generation/original_crops/suturing_cam2.pt'
+            ]
 
             self.vis_descriptor_embs = []
             for vis_knowledge_path in self.vis_knowledge_paths:

@@ -883,7 +883,7 @@ class LazySupervisedDataset(Dataset):
         if 'vis_knowledge_paths' in self.list_data_dict[i]:
             vis_descriptor_embs = []
             for vis_knowledge_path in self.list_data_dict[i]['vis_knowledge_paths']:
-                vis_knowledge_path = f'/home/guests/chantal_pellegrini/Oracle/{vis_knowledge_path}'
+                vis_knowledge_path = os.path.join(os.path.dirname(os.getcwd()), vis_knowledge_path)
                 emb = torch.load(vis_knowledge_path, map_location='cpu')
                 vis_descriptor_embs.append(emb)
             data_dict['vis_descriptor_embs'] = vis_descriptor_embs
