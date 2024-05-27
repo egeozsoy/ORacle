@@ -129,4 +129,4 @@ assumes the 4D-OR repository is located in the same folder as the root project. 
   run `python -u -m scene_graph_prediction.adaptability_4dor_eval --config oracle_mv_learned_symbolic.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_synthetic`
 - To evaluate the symbolic visual model on the adaptability benchmark
   run `python -u -m scene_graph_prediction.adaptability_4dor_eval --config oracle_mv_learned_symbolic_visual.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_synthetic_visual`
-- Finally: before uploading final results to the online eval tool, use scene_graph_prediction/map_raw_prediction_to_4dorevaluator.py to convert the predictions to the correct format.
+- Finally: before uploading final results to the online eval tool, use scene_graph_prediction/map_raw_prediction_to_4dorevaluator.py to convert the predictions to the correct format. 
