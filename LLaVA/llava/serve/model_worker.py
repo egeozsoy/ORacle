@@ -206,7 +206,6 @@ class ModelWorker:
         thread.start()
 
         generated_text = ori_prompt
-        # TODO hardcoding this is ugly
         replace_map = {'A': 'head surgeon', 'B': 'assistant surgeon', 'C': 'circulator', 'D': 'nurse', 'E': 'anaesthetist', 'F': 'patient', 'G': 'instrument table', 'H': 'operating table',
                        'I': 'secondary table', 'J': 'anesthesia equipment', 'K': 'instrument', 'L': 'Mako', 'α': 'assisting', 'β': 'cementing', 'γ': 'cleaning', 'δ': 'closeTo', 'ε': 'cutting',
                        'ζ': 'drilling',

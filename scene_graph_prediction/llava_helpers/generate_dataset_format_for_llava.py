@@ -112,7 +112,7 @@ def generate_finetuning_samples_from_dataset(dataset, n_permutations=1, views_to
 
         image_paths = [image_paths[view_idx - 1] for view_idx in views_to_use]
 
-        for permutation_idx in range(n_permutations):  # TODO does id need to be unique? because right now it is not
+        for permutation_idx in range(n_permutations):
             shuffle(relations)  # order should be random
             scene_graph_string = scene_graph_to_string(relations, human_idx_to_name)
             sample = apply_template(image_paths, scene_graph_string, timepoint=int(pcd_idx))

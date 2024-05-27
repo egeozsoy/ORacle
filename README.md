@@ -1,6 +1,7 @@
 # ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling
 
-<img align="right" src="figures/teaser.jpg" alt="teaser" width="30%" style="margin-left: 10px">
+<img align="right" src="figures/teaser.jpg" alt="teaser" width="100%" style="margin-left: 10px">
+
 Official code of the paper ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling accepted at MICCAI 2024 (https://arxiv.org/abs/2404.07031). Every day, countless surgeries are performed worldwide, each within the distinct settings of operating rooms (ORs) that vary not only in their setups but also in the personnel, tools, and equipment used. 
 This inherent diversity poses a substantial challenge for achieving a holistic understanding of the OR, as it requires models to generalize beyond their initial training datasets. 
 To reduce this gap, we introduce ORacle, an advanced vision-language model designed for holistic OR domain modeling, which incorporates multi-view and temporal capabilities and can leverage external knowledge during inference, enabling it to adapt to previously unseen surgical scenarios. 
@@ -8,6 +9,7 @@ This capability is further enhanced by our novel data augmentation framework, wh
 In rigorous testing, in scene graph generation, and downstream tasks on the 4D-OR dataset, ORacle not only demonstrates state-of-the-art performance but does so requiring less data than existing models. 
 Furthermore, its adaptability is displayed through its ability to interpret unseen views, actions, and appearances of tools and equipment. 
 This demonstrates ORacle's potential to significantly enhance the scalability and affordability of OR domain modeling and opens a pathway for future advancements in surgical data science.
+
 
 PDF Paper: To be added after it is published
 PDF Book: To be added after it is published
@@ -70,8 +72,6 @@ url={https://doi.org/10.1007/s11548-023-03022-w}
 The 4D-OR Dataset itself, is not included in this project, please refer to [4D-OR](https://github.com/egeozsoy/4D-OR) repository for information on downloading the dataset. The rest of this README
 assumes the 4D-OR repository is located in the same folder as the root project. You can modify this in: helpers/configurations.py OR_4D_DATA_ROOT_PATH
 
-TODO original crops for visual
-
 ## Installation
 
 - Run `pip install -r requirements.txt`.
@@ -102,7 +102,6 @@ TODO original crops for visual
 
 ## Training
 
-- TODO how to train normal model, temporal model, symbolic model
 - We use SLURM for all our training. If you have a setup that does not use SLURM, you can still use the configs in our slurm scripts. Usually, simply running the part after "srun" would work as well.
 - Our base model is our multiview model, without any temporality. To train this, use the slurm config (from inside the LLaVa Folder): `slurm_config_multiview.conf` (you will need to adapt the data
   path to your previously experted training json path). Furthermore, you need to modify LLaVA.llava.train.llava_trainer.py at the top, to correctly load the token_frequencies.
@@ -113,7 +112,21 @@ TODO original crops for visual
 
 ## Evaluation
 
-- Instead of training models from scratch, you can download the pretrained models from the following links:
-- TODO normal eval
-- TODO adversarial eval
-- TODO description of how to use textual or visual prompts here
+- Instead of training models from scratch, you can download the pretrained models from https://huggingface.co/egeozsoy/ORacle/tree/main and unzip and put into the folder LLAVA/checkpoints
+- To evaluate the base model
+  run `python -u -m scene_graph_prediction.main --config oracle_mv_learned.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image`
+- To evaluate the temporal model
+  run `python -u -m scene_graph_prediction.main --config oracle_mv_learned_temporal_pred.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_temporal_curriculum`
+- To evaluate the symbolic model
+  run `python -u -m scene_graph_prediction.main --config oracle_mv_learned_symbolic.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_synthetic`
+- To evaluate the symbolic visual model
+  run `python -u -m scene_graph_prediction.main --config oracle_mv_learned_symbolic_visual.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_synthetic_visual`
+
+#### Adaptability Benchmark
+
+- First download adaptability_4dor.zip from huggingface (https://huggingface.co/egeozsoy/ORacle/tree/main), then unzip it into the root folder of the project.
+- To evaluate the symbolic model on the adaptability benchmark
+  run `python -u -m scene_graph_prediction.adaptability_4dor_eval --config oracle_mv_learned_symbolic.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_synthetic`
+- To evaluate the symbolic visual model on the adaptability benchmark
+  run `python -u -m scene_graph_prediction.adaptability_4dor_eval --config oracle_mv_learned_symbolic_visual.json --model_path LLaVA/checkpoints/llava-v1.5-7b-task-lora_4dor_qlora_100perm_4_view_2135_orderaug_image_synthetic_visual`
+- Finally: before uploading final results to the online eval tool, use scene_graph_prediction/map_raw_prediction_to_4dorevaluator.py to convert the predictions to the correct format.

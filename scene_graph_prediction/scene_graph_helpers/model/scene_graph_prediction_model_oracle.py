@@ -293,7 +293,6 @@ class OracleWrapper:
                 # these have to be mapped. First to human names, also the predicates
                 scan_id_to_raw_predictions[elem['scan_id']] = raw_triplets
                 if self.temporal_online_prediction:
-                    # TODO we could shuffle the raw triplets?
                     self.take_to_history[take_idx].append({'timepoint_idx': timepoint, 'scene_graph': raw_triplets})
                 human_roles_to_indices = {human_role: f'human_{idx}' for idx, human_role in enumerate(sorted(human_roles))}
                 rel_preds = []

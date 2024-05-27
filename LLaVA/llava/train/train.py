@@ -1193,7 +1193,7 @@ def train():
     trainer = LLaVATrainer(model=model,
                            tokenizer=tokenizer,
                            args=training_args,
-                           callbacks=[SaveCallback()],  # Makes sure to save additional stuff. TODO is this working?
+                           callbacks=[SaveCallback()],  # Makes sure to save additional stuff.
                            **data_module)
 
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
