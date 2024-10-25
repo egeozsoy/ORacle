@@ -11,8 +11,8 @@ Furthermore, its adaptability is displayed through its ability to interpret unse
 This demonstrates ORacle's potential to significantly enhance the scalability and affordability of OR domain modeling and opens a pathway for future advancements in surgical data science.
 
 
-PDF Paper: To be added after it is published
-PDF Book: To be added after it is published
+PDF Paper: https://link.springer.com/content/pdf/10.1007/978-3-031-72089-5_43.pdf?pdf=inline%20link  
+PDF Book: https://link.springer.com/chapter/10.1007/978-3-031-72089-5_43a
 
 **Authors**: [Ege Özsoy][eo]\*, [Chantal Pellegrini][cp]\*, [Matthias Keicher][mk], [Nassir Navab][nassir]
 
@@ -25,11 +25,13 @@ PDF Book: To be added after it is published
 [nassir]:https://www.cs.cit.tum.de/camp/members/cv-nassir-navab/nassir-navab/
 
 ```
-@article{ozsoy2024oracle,
+@inproceedings{ozsoy2024oracle,
   title={ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling},
-  author={{\"O}zsoy, Ege and Pellegrini, Chantal and Keicher, Matthias and Navab, Nassir},
-  journal={arXiv preprint arXiv:2404.07031},
-  year={2024}
+  author={Ege Özsoy and Pellegrini, Chantal and Keicher, Matthias and Navab, Nassir},
+  booktitle={International Conference on Medical Image Computing and Computer-Assisted Intervention},
+  pages={455--465},
+  year={2024},
+  organization={Springer}
 }
 
 @inproceedings{Özsoy2023_LABRAD_OR,
