@@ -12,7 +12,7 @@ This demonstrates ORacle's potential to significantly enhance the scalability an
 
 
 PDF Paper: https://link.springer.com/content/pdf/10.1007/978-3-031-72089-5_43.pdf?pdf=inline%20link  
-PDF Book: https://link.springer.com/chapter/10.1007/978-3-031-72089-5_43a
+PDF Book: https://link.springer.com/chapter/10.1007/978-3-031-72089-5_43
 
 **Authors**: [Ege Özsoy][eo]\*, [Chantal Pellegrini][cp]\*, [Matthias Keicher][mk], [Nassir Navab][nassir]
 
