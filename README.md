@@ -2,7 +2,7 @@
 
 <img align="right" src="figures/teaser.jpg" alt="teaser" width="100%" style="margin-left: 10px">
 
-Official code of the paper ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling accepted at MICCAI 2024 (https://arxiv.org/abs/2404.07031). Every day, countless surgeries are performed worldwide, each within the distinct settings of operating rooms (ORs) that vary not only in their setups but also in the personnel, tools, and equipment used. 
+Official code of the paper ORacle: Large Vision-Language Models for Knowledge-Guided Holistic OR Domain Modeling awarded Best Paper Runner-Up at MICCAI 2024 (https://arxiv.org/abs/2404.07031). Every day, countless surgeries are performed worldwide, each within the distinct settings of operating rooms (ORs) that vary not only in their setups but also in the personnel, tools, and equipment used. 
 This inherent diversity poses a substantial challenge for achieving a holistic understanding of the OR, as it requires models to generalize beyond their initial training datasets. 
 To reduce this gap, we introduce ORacle, an advanced vision-language model designed for holistic OR domain modeling, which incorporates multi-view and temporal capabilities and can leverage external knowledge during inference, enabling it to adapt to previously unseen surgical scenarios. 
 This capability is further enhanced by our novel data augmentation framework, which significantly diversifies the training dataset, ensuring ORacle's proficiency in applying the provided knowledge effectively. 
